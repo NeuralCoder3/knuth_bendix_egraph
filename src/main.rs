@@ -15,16 +15,12 @@ use std::cmp;
 use std::fmt;
 use std::error::Error;
 
-use trs::call;
 use trs::parseeqs;
-use trs::printrule;
-use trs::strterm;
 use trs::uniquevar;
-use trs::var;
 
 use crate::trs::{
     decvarsub, distincteqs, linorm, nodes, printeqs, printrules, subst, vars, contain,
-    Equation, EquationSet, FunSym, Rule, RuleSet, Substitution, SubstitutionSet, Term, VarSym,
+    Equation, EquationSet, FunSym, Rule, RuleSet, SubstitutionSet, Term,
     Precedence,
 };
 
@@ -305,15 +301,6 @@ fn rule_complexity(rule: &Rule) -> usize {
     cmp::max(nodes(l), nodes(r))
 }
 
-/// Selects the rule with lower complexity.
-// fn choose_rule<'a>(r1: &'a Rule, r2: &'a Rule) -> &'a Rule {
-//     if rule_complexity(r1) > rule_complexity(r2) {
-//         r2
-//     } else {
-//         r1
-//     }
-// }
-
 /// Orients an equation into a rewrite rule using the ordering `lpo`.
 /// Filters for orientable equations and chooses one with minimal complexity.
 /// Returns the oriented rule together with the current rules and the remaining equations.
@@ -421,27 +408,11 @@ where
     F: Fn(&Term, &Term) -> bool,
 {
     let oriented = orient_equation(lpo, state).expect("CompletionFailed");
-    print!("oriented: ");
-    printrule(&oriented.0);
     let composed = compose(oriented);
     let deduced = deduce_critical_pairs(composed);
-    println!("deduced equations: ");
-    printeqs(&deduced.2);
     let collapsed = collapse(deduced);
     let added = add_rule(collapsed);
-    println!("rules after adding: ");
-    printrules(&added.0);
     let simplified = simplify(added);
-    println!("simplified equations: ");
-    printeqs(&simplified.1);
-    println!("simplified rules: ");
-    printrules(&simplified.0);
-
-    let t = call("M", vec![call("I", vec![var("x_1")]), call("M", vec![var("x_1"), var("z")])]);
-    let rules = &simplified.0;
-    let t_norm = linorm(&rules, &t);
-    println!("M(I(x1),M(x1,z)) -> {}", strterm(&t_norm));
-
     let removed = remove_trivial(verbose, simplified);
     removed
 }
@@ -535,24 +506,8 @@ fn knuth_bendix_completion_verbose_precedence(pre: &Precedence, eqs: EquationSet
     knuth_bendix_completion_verbose(&|t, t_prime| lpo_gt(pre, t, t_prime), eqs)
 }
 
-//
-// Helper stubs
-//
-// The following functions are assumed to exist. In a complete system they would be implemented
-// or imported from appropriate modules.
-/// Renames the variables in the given rules apart.
-// fn uniquevar(rule1: &Rule, rule2: &Rule) -> (Rule, Rule) {
-//     // Stub: in a complete implementation, return rules with renamed variables.
-//     (rule1.clone(), rule2.clone())
-// }
-
 fn main() {
-    // println!("Hello, world!");
-
     let pre: Precedence = vec![
-        // (FunSym("I".to_string()), 3),
-        // (FunSym("M".to_string()), 2),
-        // (FunSym("E".to_string()), 1),
         (String::from("I"), 3),
         (String::from("M"), 2),
         (String::from("E"), 1),

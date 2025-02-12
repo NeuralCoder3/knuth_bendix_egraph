@@ -16,7 +16,6 @@ pub type RuleSet = Vec<Rule>;
 pub type EquationSet = Vec<Equation>;
 pub type SubstitutionSet = Vec<Substitution>;
 pub type Precedence = Vec<(FunSym, i32)>;
-pub type LexPathOrder = Box<dyn Fn(&Term, &Term) -> bool>;
 
 /// Error type to indicate that the completion process failed.
 #[derive(Debug)]
@@ -31,25 +30,6 @@ impl fmt::Display for CompletionFailed {
 impl Error for CompletionFailed {}
 
 
-
-
-use std::cmp;
-
-// Assume the following types have been defined (as in your question):
-// pub type FunSym = String;
-// #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-// pub struct VarSym(pub String, pub i32);
-// #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-// pub enum Term {
-//     Variable(VarSym),
-//     Function(FunSym, Vec<Term>),
-// }
-// pub type Rule = (Term, Term);
-// pub type Equation = (Term, Term);
-// pub type Substitution = (VarSym, Term);
-// pub type RuleSet = Vec<Rule>;
-// pub type EquationSet = Vec<Equation>;
-// pub type SubstitutionSet = Vec<Substitution>;
 
 //
 // Helper functions on vectors
@@ -79,52 +59,16 @@ fn subtraction<T: Clone + PartialEq>(v: Vec<T>, to_remove: Vec<T>) -> Vec<T> {
 /// only lifetime in code
 fn find_substitution<'a>(xi: &'a VarSym, ss: &'a SubstitutionSet) -> Option<&'a Term> {
     for (var, term) in ss {
-        // if var == xi {
-        if var.0 == xi.0 && var.1 == xi.1 {
+        if var == xi {
             return Some(term);
         }
     }
     None
 }
-// fn find_substitution(xi: &VarSym, ss: &SubstitutionSet) -> Option<&Term> {
-//     for (var, term) in ss {
-//         if var == xi {
-//             return Some(term);
-//         }
-//     }
-//     None
-// }
 
 //
 // Basic term–functions
 //
-
-/// [height t] returns the height of the term [t].
-pub fn height(t: &Term) -> usize {
-    match t {
-        Term::Variable(_) => 1,
-        Term::Function(_, ts) => 1 + heightlist(ts),
-    }
-}
-
-/// [heightlist ts] returns the maximum height among a list of terms.
-pub fn heightlist(ts: &[Term]) -> usize {
-    ts.iter().map(|t| height(t)).fold(0, cmp::max)
-}
-
-/// [leaves t] returns the number of leaves in term [t].
-pub fn leaves(t: &Term) -> usize {
-    match t {
-        Term::Variable(_) => 1,
-        Term::Function(_, ts) if ts.is_empty() => 1,
-        Term::Function(_, ts) => leaveslist(ts),
-    }
-}
-
-/// [leaveslist ts] returns the sum of the leaves in a list of terms.
-pub fn leaveslist(ts: &[Term]) -> usize {
-    ts.iter().map(|t| leaves(t)).sum()
-}
 
 /// [nodes t] returns the total number of nodes in term [t].
 pub fn nodes(t: &Term) -> usize {
@@ -152,22 +96,6 @@ pub fn varslist(ts: &[Term]) -> Vec<VarSym> {
     ts.iter()
         .map(|t| vars(t))
         .fold(Vec::new(), |acc, v| union(acc, v))
-}
-
-/// [funs t] returns the list of function symbols occurring in [t].
-pub fn funs(t: &Term) -> Vec<FunSym> {
-    match t {
-        Term::Variable(_) => vec![],
-        Term::Function(f, ts) => {
-            let f_list = vec![f.clone()];
-            union(f_list, funslist(ts))
-        }
-    }
-}
-
-/// [funslist ts] returns the union (without duplicates) of function symbols in a list of terms.
-pub fn funslist(ts: &[Term]) -> Vec<FunSym> {
-    ts.iter().map(|t| funs(t)).fold(Vec::new(), |acc, v| union(acc, v))
 }
 
 /// [subst ss t] recursively applies the substitution set [ss] to term [t].
@@ -234,101 +162,18 @@ pub fn containlist(l: &Term, ts: &[Term]) -> bool {
     ts.iter().any(|t| contain(l, t))
 }
 
-/// [rewrite rs t] tries each rule in [rs] (in order) and, if [l] collates with [t],
-/// returns [subst s r] for that rule.
-pub fn rewrite(rs: &RuleSet, t: &Term) -> Option<Term> {
-    for (l, r) in rs {
-        if let Some(s) = collate(l, t) {
-            return Some(subst(&s, r));
-        }
-    }
-    None
-}
-
 //
 // Reduction functions (left‐to‐right, outermost, etc.)
 //
 
-/// [lireduce rs t] performs a leftmost reduction on [t] using the rules [rs].
-pub fn lireduce(rs: &RuleSet, t: &Term) -> Option<Term> {
-    match t {
-        Term::Variable(_) => rewrite(rs, t),
-        Term::Function(f, ts) => {
-            if let Some(ts_new) = lireducelist(rs, ts) {
-                Some(Term::Function(f.clone(), ts_new))
-            } else {
-                rewrite(rs, t)
-            }
-        }
-    }
-}
-
-/// [lireducelist rs ts] attempts a leftmost reduction in the list [ts].
-pub fn lireducelist(rs: &RuleSet, ts: &[Term]) -> Option<Vec<Term>> {
-    if ts.is_empty() {
-        None
-    } else if let Some(t_prime) = lireduce(rs, &ts[0]) {
-        let mut new_vec = vec![t_prime];
-        new_vec.extend_from_slice(&ts[1..]);
-        Some(new_vec)
-    } else if let Some(mut ts_prime) = lireducelist(rs, &ts[1..]) {
-        let mut new_vec = vec![ts[0].clone()];
-        new_vec.append(&mut ts_prime);
-        Some(new_vec)
-    } else {
-        None
-    }
-}
-
 /// [linormtop rs sub_rs t] normalizes [t] by scanning the rule list [sub_rs] (which is
 /// normally the entire rewrite set [rs]). If no rule applies, [t] is returned unchanged.
-// pub fn linormtop(rs: &RuleSet, sub_rs: &[Rule], t: &Term) -> Term {
-//     if sub_rs.is_empty() {
-//         t.clone()
-//     } else {
-//         let (l, r) = &sub_rs[0];
-//         if let Some(s) = collate(l, t) {
-//             linormsubst(rs, &s, r)
-//         } else {
-//             linormtop(rs, &sub_rs[1..], t)
-//         }
-//     }
-// }
-
-/// [linormsubst rs s t] applies the substitution [s] to [t] and then normalizes.
-// pub fn linormsubst(rs: &RuleSet, s: &SubstitutionSet, t: &Term) -> Term {
-//     match t {
-//         Term::Variable(_) => subst(s, t),
-//         Term::Function(f, ts) => {
-//             let mapped = ts.iter().map(|t| linormsubst(rs, s, t)).collect();
-//             let new_term = Term::Function(f.clone(), mapped);
-//             linormtop(rs, rs, &new_term)
-//         }
-//     }
-// }
-
-
-/// [linorm rs t] normalizes [t] with respect to [rs].
-// pub fn linorm(rs: &RuleSet, t: &Term) -> Term {
-//     match t {
-//         Term::Variable(_) => linormtop(rs, rs, t),
-//         Term::Function(f, ts) => {
-//             let new_ts = ts.iter().map(|t| linorm(rs, t)).collect();
-//             linormtop(rs, rs, &Term::Function(f.clone(), new_ts))
-//         }
-//     }
-// }
-
-
-
 pub fn linormtop(rs: &RuleSet, sub_rs: &[Rule], t: &Term) -> Term {
     if sub_rs.is_empty() {
         t.clone()
     } else {
         let (l, r) = &sub_rs[0];
         if let Some(s) = collate(l, t) {
-            // First apply the substitution to r, then normalize the result with the full rule set.
-            // linorm(rs, &subst(&s, r))
             linormsubst(rs, &s, r)
         } else {
             linormtop(rs, &sub_rs[1..], t)
@@ -336,119 +181,27 @@ pub fn linormtop(rs: &RuleSet, sub_rs: &[Rule], t: &Term) -> Term {
     }
 }
 
+/// [linormsubst rs s t] applies the substitution [s] to [t] and then normalizes.
 pub fn linormsubst(rs: &RuleSet, s: &SubstitutionSet, t: &Term) -> Term {
     match t {
         Term::Variable(_) => subst(s, t),
         Term::Function(f, ts) => {
-            // Recursively apply linormsubst to the subterms but do not immediately rescan the function node.
-            let mapped: Vec<Term> = ts.iter().map(|t| linormsubst(rs, s, t)).collect();
-            linormtop(rs,rs,&Term::Function(f.clone(), mapped))
+            let mapped = ts.iter().map(|t| linormsubst(rs, s, t)).collect();
+            let new_term = Term::Function(f.clone(), mapped);
+            linormtop(rs, rs, &new_term)
         }
     }
 }
 
+
+/// [linorm rs t] normalizes [t] with respect to [rs].
 pub fn linorm(rs: &RuleSet, t: &Term) -> Term {
     match t {
         Term::Variable(_) => linormtop(rs, rs, t),
         Term::Function(f, ts) => {
-            let new_ts: Vec<Term> = ts.iter().map(|t| linorm(rs, t)).collect();
+            let new_ts = ts.iter().map(|t| linorm(rs, t)).collect();
             linormtop(rs, rs, &Term::Function(f.clone(), new_ts))
         }
-    }
-}
-
-/// [loreduce rs t] performs an outermost reduction on [t].
-pub fn loreduce(rs: &RuleSet, t: &Term) -> Option<Term> {
-    match t {
-        Term::Variable(_) => rewrite(rs, t),
-        Term::Function(f, ts) => {
-            if let Some(t_prime) = rewrite(rs, t) {
-                Some(t_prime)
-            } else if let Some(ts_new) = loreducelist(rs, ts) {
-                Some(Term::Function(f.clone(), ts_new))
-            } else {
-                None
-            }
-        }
-    }
-}
-
-/// [loreducelist rs ts] attempts an outermost reduction in the list [ts].
-pub fn loreducelist(rs: &RuleSet, ts: &[Term]) -> Option<Vec<Term>> {
-    if ts.is_empty() {
-        None
-    } else if let Some(t_prime) = loreduce(rs, &ts[0]) {
-        let mut new_vec = vec![t_prime];
-        new_vec.extend_from_slice(&ts[1..]);
-        Some(new_vec)
-    } else if let Some(mut ts_prime) = loreducelist(rs, &ts[1..]) {
-        let mut new_vec = vec![ts[0].clone()];
-        new_vec.append(&mut ts_prime);
-        Some(new_vec)
-    } else {
-        None
-    }
-}
-
-/// [lonorm rs t] repeatedly applies outermost reduction until no further reduction is possible.
-pub fn lonorm(rs: &RuleSet, t: &Term) -> Term {
-    if let Some(t_prime) = loreduce(rs, t) {
-        lonorm(rs, &t_prime)
-    } else {
-        t.clone()
-    }
-}
-
-/// [poreduce rs t] performs a “parallel” outermost reduction on [t].
-pub fn poreduce(rs: &RuleSet, t: &Term) -> Option<Term> {
-    match t {
-        Term::Variable(_) => rewrite(rs, t),
-        Term::Function(f, ts) => {
-            if let Some(t_prime) = rewrite(rs, t) {
-                Some(t_prime)
-            } else if let Some(ts_new) = poreducelist(rs, ts) {
-                Some(Term::Function(f.clone(), ts_new))
-            } else {
-                None
-            }
-        }
-    }
-}
-
-/// [poreducelist rs ts] attempts a parallel outermost reduction in [ts].
-pub fn poreducelist(rs: &RuleSet, ts: &[Term]) -> Option<Vec<Term>> {
-    if ts.is_empty() {
-        None
-    } else {
-        let first_red = poreduce(rs, &ts[0]);
-        let rest_red = poreducelist(rs, &ts[1..]);
-        match (first_red, rest_red) {
-            (Some(t_prime), Some(mut ts_prime)) => {
-                let mut new_vec = vec![t_prime];
-                new_vec.append(&mut ts_prime);
-                Some(new_vec)
-            }
-            (Some(t_prime), None) => {
-                let mut new_vec = vec![t_prime];
-                new_vec.extend_from_slice(&ts[1..]);
-                Some(new_vec)
-            }
-            (None, Some(mut ts_prime)) => {
-                let mut new_vec = vec![ts[0].clone()];
-                new_vec.append(&mut ts_prime);
-                Some(new_vec)
-            }
-            (None, None) => None,
-        }
-    }
-}
-
-/// [ponorm rs t] repeatedly applies parallel reduction until no further reduction occurs.
-pub fn ponorm(rs: &RuleSet, t: &Term) -> Term {
-    if let Some(t_prime) = poreduce(rs, t) {
-        ponorm(rs, &t_prime)
-    } else {
-        t.clone()
     }
 }
 
@@ -862,19 +615,6 @@ pub fn parseeqs(ls: Vec<&str>) -> EquationSet {
 //
 
 /// [strterm t] returns a string representation of [t].
-// pub fn strterm(t: &Term) -> String {
-//     match t {
-//         Term::Variable(x, i) if *i == 0 => x.clone(),
-//         Term::Variable(x, i) => format!("{}_{}", x, i),
-//         Term::Function(f, ts) => {
-//             if ts.is_empty() {
-//                 f.clone()
-//             } else {
-//                 format!("{}({})", f, strtermlist(ts))
-//             }
-//         }
-//     }
-// }
 pub fn strterm(t: &Term) -> String {
     match t {
         Term::Variable(VarSym(x, i)) if *i == 0 => x.clone(),
