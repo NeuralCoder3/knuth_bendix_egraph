@@ -133,6 +133,36 @@ pub fn collate(l: &Term, r: &Term) -> Option<SubstitutionSet> {
     }
 }
 
+/// Attempts to extend `xs` with all substitutions in `ys`, provided that if a key
+/// is already present in `xs` then its value agrees with the one in `ys`.
+/// Returns `Some(extended)` if successful, or `None` if there is a conflict.
+pub fn duplicate_free_extend(
+    xs: &SubstitutionSet,
+    ys: &SubstitutionSet,
+) -> Option<SubstitutionSet> {
+    if ys.is_empty() {
+        return Some(xs.clone());
+    }
+    let (k, v) = &ys[0];
+
+    // Check whether xs already contains a substitution for k.
+    if let Some((_, x)) = xs.iter().find(|(key, _)| key == k) {
+        if x == v {
+            duplicate_free_extend(xs, &ys[1..].to_vec())
+        } else {
+            None
+        }
+    } else {
+        if let Some(mut zs) = duplicate_free_extend(xs, &ys[1..].to_vec()) {
+            zs.insert(0, (k.clone(), v.clone()));
+            Some(zs)
+        } else {
+            None
+        }
+    }
+}
+
+
 /// [collatelist ls rs] returns a substitution if every corresponding pair in [ls] and [rs] collates.
 pub fn collatelist(ls: &[Term], rs: &[Term]) -> Option<SubstitutionSet> {
     if ls.len() != rs.len() {
@@ -141,7 +171,11 @@ pub fn collatelist(ls: &[Term], rs: &[Term]) -> Option<SubstitutionSet> {
     let mut result = Vec::new();
     for (t, t_prime) in ls.iter().zip(rs.iter()) {
         if let Some(s) = collate(t, t_prime) {
-            result.extend(s);
+            // result.extend(s);
+            result = match duplicate_free_extend(&result, &s) {
+                Some(sub) => sub,
+                None => return None,
+            };
         } else {
             return None;
         }
