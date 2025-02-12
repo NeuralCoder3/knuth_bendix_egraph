@@ -1,70 +1,5 @@
-use std::fmt;
-use std::error::Error;
-
-pub type FunSym = String;
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct VarSym(pub String, pub i32);
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Term {
-    Variable(VarSym),
-    Function(FunSym, Vec<Term>),
-}
-pub type Rule = (Term, Term);
-pub type Equation = (Term, Term);
-pub type Substitution = (VarSym, Term);
-pub type RuleSet = Vec<Rule>;
-pub type EquationSet = Vec<Equation>;
-pub type SubstitutionSet = Vec<Substitution>;
-pub type Precedence = Vec<(FunSym, i32)>;
-
-/// Error type to indicate that the completion process failed.
-#[derive(Debug)]
-pub struct CompletionFailed;
-
-impl fmt::Display for CompletionFailed {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CompletionFailed")
-    }
-}
-
-impl Error for CompletionFailed {}
-
-
-
-//
-// Helper functions on vectors
-//
-
-/// Returns the union of two vectors (without duplicates).
-fn union<T: Clone + PartialEq>(mut v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
-    for item in v2 {
-        if !v1.contains(&item) {
-            v1.push(item);
-        }
-    }
-    v1
-}
-
-/// Returns the intersection of two vectors.
-fn intersection<T: Clone + PartialEq>(v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
-    v1.into_iter().filter(|x| v2.contains(x)).collect()
-}
-
-/// Subtracts all elements in `to_remove` from `v`.
-fn subtraction<T: Clone + PartialEq>(v: Vec<T>, to_remove: Vec<T>) -> Vec<T> {
-    v.into_iter().filter(|item| !to_remove.contains(item)).collect()
-}
-
-/// Finds a substitution for a variable in a substitution set.
-/// only lifetime in code
-fn find_substitution<'a>(xi: &'a VarSym, ss: &'a SubstitutionSet) -> Option<&'a Term> {
-    for (var, term) in ss {
-        if var == xi {
-            return Some(term);
-        }
-    }
-    None
-}
+use crate::types::*;
+use crate::util::*;
 
 //
 // Basic term–functions
@@ -132,36 +67,6 @@ pub fn collate(l: &Term, r: &Term) -> Option<SubstitutionSet> {
         },
     }
 }
-
-/// Attempts to extend `xs` with all substitutions in `ys`, provided that if a key
-/// is already present in `xs` then its value agrees with the one in `ys`.
-/// Returns `Some(extended)` if successful, or `None` if there is a conflict.
-pub fn duplicate_free_extend(
-    xs: &SubstitutionSet,
-    ys: &SubstitutionSet,
-) -> Option<SubstitutionSet> {
-    if ys.is_empty() {
-        return Some(xs.clone());
-    }
-    let (k, v) = &ys[0];
-
-    // Check whether xs already contains a substitution for k.
-    if let Some((_, x)) = xs.iter().find(|(key, _)| key == k) {
-        if x == v {
-            duplicate_free_extend(xs, &ys[1..].to_vec())
-        } else {
-            None
-        }
-    } else {
-        if let Some(mut zs) = duplicate_free_extend(xs, &ys[1..].to_vec()) {
-            zs.insert(0, (k.clone(), v.clone()));
-            Some(zs)
-        } else {
-            None
-        }
-    }
-}
-
 
 /// [collatelist ls rs] returns a substitution if every corresponding pair in [ls] and [rs] collates.
 pub fn collatelist(ls: &[Term], rs: &[Term]) -> Option<SubstitutionSet> {

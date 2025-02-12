@@ -1,28 +1,16 @@
-mod trs;
-
-// fn main() {
-//     println!("Hello, world!");
-// }
-
-// Completion procedures based on Knuth–Bendix – a Rust translation.
-//
-// Many helper functions (such as `nodes`, `vars`, `subst`, `linorm`, 
-// `contain`, `decvarsub`, `distincteqs`, `printeqs`, `printrules`, and so on)
-// as well as the types `Term`, `Rule`, `Equation`, etc., are assumed to be declared 
-// (see the provided type definitions).
+mod term_rewrite;
+mod types;
+mod util;
 
 use std::cmp;
 use std::fmt;
 use std::error::Error;
 
-use trs::parseeqs;
-use trs::uniquevar;
+use term_rewrite::parseeqs;
+use term_rewrite::uniquevar;
 
-use crate::trs::{
-    decvarsub, distincteqs, linorm, nodes, printeqs, printrules, subst, vars, contain,
-    Equation, EquationSet, FunSym, Rule, RuleSet, SubstitutionSet, Term,
-    Precedence,
-};
+use crate::term_rewrite::*;
+use crate::types::*;
 
 /// Error type indicating that completion failed.
 #[derive(Debug)]
@@ -113,7 +101,7 @@ fn unify_term_lists(
 }
 
 /// A convenience function to unify two terms starting with an empty substitution.
-/// (The resulting substitution is “reversed” as in the OCaml version.)
+/// (The resulting substitution is “reversed”)
 fn unify(t: &Term, t_prime: &Term) -> Option<SubstitutionSet> {
     let mut s = unify_with_subst(&vec![], t, t_prime)?;
     s.reverse();
