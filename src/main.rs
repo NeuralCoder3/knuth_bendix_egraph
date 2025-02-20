@@ -494,17 +494,158 @@ fn knuth_bendix_completion_verbose_precedence(pre: &Precedence, eqs: EquationSet
     knuth_bendix_completion_verbose(&|t, t_prime| lpo_gt(pre, t, t_prime), eqs)
 }
 
+
+
+fn knuth_steps<F>(
+    verbose: bool,
+    lpo: &F,
+    state: &(RuleSet, EquationSet),
+) -> (RuleSet, EquationSet)
+where
+    F: Fn(&Term, &Term) -> bool,
+{
+
+    // Orient, Compose, collapse => if orientable and new rule used
+    // simplify, remove trivial => always
+
+    let copy = state.clone();
+    if let Ok(oriented) = orient_equation(lpo, copy) {
+        let composed = compose(oriented);
+        let collapsed = collapse(composed);
+        let added = add_rule(collapsed);
+        let simplified = simplify(added);
+        let removed = remove_trivial(verbose, simplified);
+        removed
+    } else {
+        let copy = state.clone();
+        let simplified = simplify(copy);
+        let removed = remove_trivial(verbose, simplified);
+        removed
+    }
+}
+
+fn knuth_loop<F>(
+    verbose: bool,
+    lpo: &F,
+    state: (RuleSet, EquationSet),
+) -> (RuleSet, EquationSet)
+where
+    F: Fn(&Term, &Term) -> bool,
+{
+    let mut changed = true;
+    let mut new_state = state;
+    while changed {
+        changed = false;
+        // let (rules, eqs) = new_state;
+        let new_state_prime = knuth_steps(verbose, lpo, &new_state);
+        if new_state != new_state_prime {
+            changed = true;
+            new_state = new_state_prime;
+        }
+    }
+    new_state
+}
+
+
 fn main() {
     let pre: Precedence = vec![
         (String::from("I"), 3),
-        (String::from("M"), 2),
-        (String::from("E"), 1),
+        (String::from("M"), 1),
+        (String::from("E"), 2),
     ];
-    let eqs : EquationSet = parseeqs(vec![
+    let mut eqs : EquationSet = parseeqs(vec![
         "M(M(x,y),z)=M(x,M(y,z))", 
         "M(I(x),x)=E", 
         "M(E,x)=x"
     ]);
-    knuth_bendix_completion_verbose_precedence(&pre, eqs);
+//     { I(M(x, y)) -> M(I(y), I(x))
+//   M(x, M(I(x), z)) -> z
+//   M(x, I(x)) -> E
+//   I(I(x)) -> x
+//   I(E) -> E
+//   M(x, E) -> x
+//   M(I(x), M(x, z)) -> z
+//   M(M(x, y), z) -> M(x, M(y, z))
+//   M(I(x), x) -> E
+//   M(E, x) -> x }
+
+    // test knuth_bendix_completion
+    // let rules = knuth_bendix_completion_verbose_precedence(&pre, eqs);
+    // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
+    // let t_prime = linorm(&rules, &t);
+    // println!("{}", strterm(&t_prime));
+
+
+    let mut rules : RuleSet = vec![];
+    // let state = (rules, eqs);
+
+
+    let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
+
+    // Step 0
+    let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
+    // we changed (by init) our R/E, so KBO
+    let state = knuth_loop(true, &lpo, (rules, eqs));
+    rules = state.0;
+    eqs = state.1;
+
+    let t_prime = linorm(&rules, &t);
+    println!("Rules:");
+    printrules(&rules);
+    println!("Equations:");
+    printeqs(&eqs);
+    println!("Result:");
+    println!("{}", strterm(&t_prime));
+
+    // Step 1
+    // TODO: map/ ast graph
+    // 
+
+    // Step 2
+    // skipped, even necessary?
+    // put all rules into E
+
+
+    // Step 3
+    // Step 3.1 (e-graph phase)
+    // TODO: match using rules (can they ever apply?)/equations (as rules both sides), add ground equations (oriented to R)
+    // normalize left side of rule, match on AST
+
+
+    
+    // Step 3.2 (KBO)
+    // get critical pairs, select promising ones for E
+
+    for i in 0..5 {
+        let mut cps = vec![];
+        for rule1 in rules.iter() {
+            for rule2 in rules.iter() {
+                let cp = critical_pair(rule1, rule2);
+                cps.extend(cp);
+            }
+        }
+        // println!("Critical pairs:");
+        // for (l, r) in cps.iter() {
+        //     println!("{} ! {}", strterm(l), strterm(r));
+        // }
+
+        // TODO: only add some critical pairs (ematch or grounded)
+        eqs.extend(cps);
+        let state = knuth_loop(true, &lpo, (rules, eqs));
+        rules = state.0;
+        eqs = state.1;
+        println!();
+        println!();
+        println!("Iteration {}", i);
+        println!("Rules:");
+        printrules(&rules);
+        println!("Equations:");
+        printeqs(&eqs);
+        println!("Result:");
+        let t_prime = linorm(&rules, &t);
+        println!("{}", strterm(&t_prime));
+    }
+
+
 
 }
