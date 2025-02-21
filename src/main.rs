@@ -3,6 +3,8 @@ mod types;
 mod util;
 
 use std::cmp;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt;
 use std::error::Error;
 
@@ -547,6 +549,13 @@ where
 }
 
 
+#[derive(Hash, Debug, PartialEq, Eq)]
+struct Node {
+    label: String,
+    children: Vec<Node>
+}
+
+
 fn main() {
     let pre: Precedence = vec![
         (String::from("I"), 3),
@@ -614,6 +623,42 @@ fn main() {
     // => rewrite *(2,x) to >>(x,1), delete the * node, keep the 2 node
     // update the parent pointers
 
+    // we identify the graph by its embedding of terms
+    let mut embedding : HashMap<Term, Node> = HashMap::new();
+    let mut roots : HashSet<Node> = HashSet::new();
+    let mut parent : HashMap<Node, Node> = HashMap::new();
+
+    // the caller is responsible for the roots
+    // TODO: think about ownership (handle reference by id/pointer reference)
+
+    // fn embed(t: &Term, embedding: &mut HashMap<Term, Node>, parent: &mut HashMap<Node, Node>, roots: &mut HashSet<Node>) -> Node {
+    //     // lookup in graph
+    //     if let Some(node) = embedding.get(t) {
+    //         return node;
+    //     }
+    //     match t {
+    //         Term::Variable(var) => {
+    //             // variable becomes a leaf (recursive calls will handle parents)
+    //             let node = Node { label: var.0.clone(), children: vec![] };
+    //             embedding.insert(t.clone(), node);
+    //             return &embedding[&t];
+    //         }
+    //         Term::Function(f, ts) => {
+    //             // embed all children, then create a new node (keep track of parent)
+    //             let mut children = vec![];
+    //             for t_prime in ts {
+    //                 let child = embed(t_prime, embedding, parent, roots);
+    //                 children.push(child);
+    //             }
+    //             let node = Node { label: f.clone(), children: children };
+    //             for child in children {
+    //                 parent.insert(child, node);
+    //             }
+    //             embedding.insert(t.clone(), node);
+    //             return &embedding[&t];
+    //         }
+    //     }
+    // }
 
 
 
