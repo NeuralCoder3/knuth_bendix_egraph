@@ -599,7 +599,24 @@ fn main() {
 
     // Step 1
     // TODO: map/ ast graph
-    // 
+    // we have an ast but keep all old nodes (in a normalized form) as DAG 
+    // => we want to not overlook possible equalities on old forms
+
+    // Node = { label: Symbol, children: Vec<Node> }
+    // a translation function (that also simplifies -- memoization): map : Term -> Node
+    // (maybe) a set of roots: R : Set<Node>
+    // a parent map: parent : Node -> Node (necessary for rule application)
+    // functions on our DAG
+    // embed: Term -> Node
+    // simplify, applies rules to the tree
+    // f _(*(2,x))_ -> f _(>>(x,1))_
+    // but also g _(*(2,x))_ -> g _(>>(x,1))_
+    // => rewrite *(2,x) to >>(x,1), delete the * node, keep the 2 node
+    // update the parent pointers
+
+
+
+
 
     // Step 2
     // skipped, even necessary?
