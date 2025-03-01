@@ -559,6 +559,44 @@ struct Node {
     children: Vec<Rc<Node>>
 }
 
+struct KBEGraph {
+    embedding: HashMap<Term, Rc<Node>>,
+    roots : HashSet<Rc<Node>>,
+    parent : HashMap<Rc<Node>, Rc<Node>>
+}
+
+// the caller is responsible for the roots
+fn embed(t: &Term, dag: &mut KBEGraph) -> Rc<Node> {
+    // lookup in graph
+    if let Some(node) = dag.embedding.get(t) {
+        return node.clone();
+    }
+    match t {
+        Term::Variable(var) => {
+            // variable becomes a leaf (recursive calls will handle parents)
+            let node = Node { label: var.0.clone(), children: vec![] };
+            let node = Rc::new(node);
+            dag.embedding.insert(t.clone(), node.clone());
+            return node;
+        }
+        Term::Function(f, ts) => {
+            // embed all children, then create a new node (keep track of parent)
+            let mut children = vec![];
+            for t_prime in ts {
+                let child = embed(t_prime, dag);
+                children.push(child);
+            }
+            let node = Node { label: f.clone(), children: children.iter().cloned().collect() };
+            let node = Rc::new(node);
+            for child in children {
+                dag.parent.insert(child, node.clone());
+            }
+            dag.embedding.insert(t.clone(), node.clone());
+            return node;
+        }
+    }
+}
+
 
 fn main() {
     let pre: Precedence = vec![
@@ -627,18 +665,8 @@ fn main() {
     // => rewrite *(2,x) to >>(x,1), delete the * node, keep the 2 node
     // update the parent pointers
 
-    struct KBEGraph {
-        embedding: HashMap<Term, Rc<Node>>,
-        roots : HashSet<Rc<Node>>,
-        parent : HashMap<Rc<Node>, Rc<Node>>
-    }
 
     // we identify the graph by its embedding of terms
-    // let mut embedding : HashMap<Term, Rc<Node>> = HashMap::new();
-    // // Rc<Node> is enough as we have identity-based lookup on nodes
-    // // TODO: does this work with the idea of our embedding?
-    // let mut roots : HashSet<Rc<Node>> = HashSet::new();
-    // let mut parent : HashMap<Rc<Node>, Rc<Node>> = HashMap::new();
     let mut dag = KBEGraph {
         embedding: HashMap::new(),
         roots: HashSet::new(),
@@ -646,71 +674,6 @@ fn main() {
     };
 
 
-    // let mut testmap : HashSet<Rc<i32>> = HashSet::new();
-    // let a = Rc::new(42);
-    // testmap.insert(a.clone());
-    // all four are true
-    // println!("Contains a? {}", testmap.contains(&a));
-    // println!("Contains clone of a? {}", testmap.contains(&a.clone()));
-    // println!("Contains new 42? {}", testmap.contains(&Rc::new(42)));
-    // println!("Contains auto 42? {}", testmap.contains(&42));
-    // println!("Contains auto 43? {}", testmap.contains(&43));
-
-    // #[derive(Hash, Debug, PartialEq, Eq)]
-    // struct ComplexString { name: String }
-    // let mut testmap : HashSet<Rc<ComplexString>> = HashSet::new();
-    // let a = Rc::new(ComplexString{name:"A".to_string()});
-    // testmap.insert(a.clone());
-    // println!("Contains a? {}", testmap.contains(&a));
-    // println!("Contains clone of a? {}", testmap.contains(&a.clone()));
-    // println!("Contains new A? {}", testmap.contains(&Rc::new(ComplexString{name:"A".to_string()})));
-    // println!("Contains auto A? {}", testmap.contains(&ComplexString{name:"A".to_string()}));
-    // panic!();
-
-    // the caller is responsible for the roots
-    // TODO: think about ownership (handle reference by id/pointer reference)
-
-
-    // fn embed(t: &Term, embedding: &mut HashMap<Term, Rc<Node>>, parent: &mut HashMap<Rc<Node>,Rc<Node>>, roots: &mut HashSet<Rc<Node>>) -> Rc<Node> {
-    fn embed(t: &Term, dag: &mut KBEGraph) -> Rc<Node> {
-        // let mut embedding = &mut dag.embedding;
-        // let mut roots = &mut dag.roots;
-        // let mut parent = &mut dag.parent;
-        // lookup in graph
-        if let Some(node) = dag.embedding.get(t) {
-            return node.clone();
-        }
-        match t {
-            Term::Variable(var) => {
-                // variable becomes a leaf (recursive calls will handle parents)
-                let node = Node { label: var.0.clone(), children: vec![] };
-                let node = Rc::new(node);
-                dag.embedding.insert(t.clone(), node.clone());
-                return node;
-            }
-            Term::Function(f, ts) => {
-                // embed all children, then create a new node (keep track of parent)
-                let mut children = vec![];
-                for t_prime in ts {
-                    let child = embed(t_prime, dag);
-                    children.push(child);
-                }
-                let node = Node { label: f.clone(), children: children.iter().cloned().collect() };
-                let node = Rc::new(node);
-                for child in children {
-                    dag.parent.insert(child, node.clone());
-                }
-                dag.embedding.insert(t.clone(), node.clone());
-                return node;
-                // let node = Node { label: f.clone(), children: children };
-                // for child in children {
-                //     parent.insert(child, node);
-                // }
-                // embedding.insert(t.clone(), node);
-                // return &embedding[&t];
-            }
-        }
-    }
 
 
 
