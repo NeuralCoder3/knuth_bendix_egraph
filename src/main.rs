@@ -544,14 +544,34 @@ struct Node {
     content: Rc<RefCell<RawNode>>,
 }
 impl Node {
-    fn new(dag:&mut KBEGraph, content: RawNode) -> Node {
+    fn new(dag:&mut KBEGraph, label: String, children: Vec<Node>) -> Node {
         let id = dag.nodecount;
         dag.nodecount += 1;
         Node {
             id,
-            content: Rc::new(RefCell::new(content)),
+            content: Rc::new(RefCell::new(RawNode {
+                label,
+                children,
+            })),
         }
     }
+
+    fn label(&self) -> String {
+        self.content.borrow().label.clone()
+    }
+
+    fn label_ref(&self) -> std::cell::Ref<'_, String> {
+        std::cell::Ref::map(self.content.borrow(), |raw| &raw.label)
+    }
+
+    fn children(&self) -> std::vec::Vec<Node> {
+        self.content.borrow().children.clone()
+    }
+
+    fn children_ref(&self) -> std::cell::Ref<'_, std::vec::Vec<Node>> {
+        std::cell::Ref::map(self.content.borrow(), |raw| &raw.children)
+    }
+
     // fn new(dag:&mut KBEGraph, content: RawNode) -> Node {
     //     let id = dag.nodecount;
     //     dag.nodecount += 1;
@@ -603,11 +623,11 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
                 let child = embed(t_prime, dag);
                 children.push(child);
             }
-            let node = Node {
-                label: f.clone(),
-                children: children.iter().cloned().collect(),
-            };
-            let node = Rc::new(node);
+            let node = Node::new(
+                dag,
+                f.clone(),
+                children.iter().cloned().collect(),
+            );
             for (i, child) in children.into_iter().enumerate() {
                 dag.parent.insert(child, (i as usize, node.clone()));
             }
@@ -619,9 +639,9 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
 
 fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
     // term instance and subterm
-    fn aux(node: Rc<Node>) -> (Term, Vec<Term>) {
+    fn aux(node: Node) -> (Term, Vec<Term>) {
         let subs: Vec<(Term, Vec<Term>)> = node
-            .children
+            .children_ref()
             .iter()
             .map(|child| aux(child.clone()))
             .collect();
@@ -633,7 +653,7 @@ fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
             .chain(direct_subterms.iter().cloned())
             .collect();
         let term = Term::Function(
-            node.label.clone(),
+            node.label(),
             subs.iter().map(|(t, _)| t.clone()).collect(),
         );
         (term, subterms)
@@ -651,17 +671,17 @@ fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
     instances
 }
 
-fn node_match_term(node: &Rc<Node>, t: &Term) -> bool {
+fn node_match_term(node: &Node, t: &Term) -> bool {
     match t {
-        Term::Variable(var) => node.label == var.0,
+        Term::Variable(var) => node.label() == var.0,
         Term::Function(f, ts) => {
-            if node.label != f.clone() {
+            if node.label() != f.clone() {
                 return false;
             }
-            if node.children.len() != ts.len() {
+            if node.children_ref().len() != ts.len() {
                 return false;
             }
-            for (child, t_prime) in node.children.iter().zip(ts.iter()) {
+            for (child, t_prime) in node.children_ref().iter().zip(ts.iter()) {
                 if !node_match_term(child, t_prime) {
                     return false;
                 }
@@ -672,14 +692,15 @@ fn node_match_term(node: &Rc<Node>, t: &Term) -> bool {
 }
 
 fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> () {
-    fn aux(node: &Rc<Node>, dag: &mut KBEGraph, rule: &Rule) -> () {
+    fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> () {
         // top up
         if node_match_term(node, &rule.0) {
             // apply rule
             // (rule destination is already simplified by KBO)
             let new_node = embed(&rule.1, dag);
             let (i, parent) = dag.parent.get(node).unwrap();
-            parent.children[*i] = new_node;
+            // parent.children[*i] = new_node;
+            parent.content.borrow_mut().children[*i] = new_node;
 
         }
 
@@ -770,6 +791,7 @@ fn main() {
 
     // we identify the graph by its embedding of terms
     let mut dag = KBEGraph {
+        nodecount: 0,
         embedding: HashMap::new(),
         roots: HashSet::new(),
         parent: HashMap::new(),
