@@ -692,27 +692,43 @@ fn node_match_term(node: &Node, t: &Term) -> bool {
 }
 
 fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> () {
-    fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> () {
+    fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> () { 
         // top up
         if node_match_term(node, &rule.0) {
             // apply rule
             // (rule destination is already simplified by KBO)
             let new_node = embed(&rule.1, dag);
-            let (i, parent) = dag.parent.get(node).unwrap();
-            // parent.children[*i] = new_node;
-            parent.content.borrow_mut().children[*i] = new_node;
-
+            // only update if not root
+            if let Some((i, parent)) = dag.parent.get(node) {
+                // update parent
+                parent.content.borrow_mut().children[*i] = new_node.clone();
+                dag.parent.insert(new_node, (*i, parent.clone()));
+            }
+            // old children have to be preserved (thus becoming roots)
+            for child in node.children_ref().iter() {
+                dag.roots.insert(child.clone());
+                dag.parent.remove(child);
+            }
+            // visit all new roots recursively (that is the default -> drop down to else)
         }
-
-
-        // bottom up -> first simplify children, then simplify node
+        for child in node.children_ref().iter() {
+            aux(child, dag, rule);
+        }
     }
+    // let mut visit_roots = dag.roots.iter().cloned().collect::<Vec<Node>>();
+    // while !visit_roots.is_empty() {
+    //     let node = visit_roots.pop().unwrap();
+    //     let new_roots = aux(&node, dag, rule);
+    //     visit_roots.extend(new_roots);
+    // }
+
     let orig_roots = dag.roots.clone();
     for root in orig_roots.iter() {
         aux(root, dag, rule);
     }
 }
 
+// expect grounded rules
 fn simplify_dag(dag: &mut KBEGraph, rules: &RuleSet) -> () {
     for rule in rules.iter() {
         simplify_dag_with_rule(dag, rule);
