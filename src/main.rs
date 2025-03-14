@@ -2,11 +2,12 @@ mod term_rewrite;
 mod types;
 mod util;
 
+use std::cell::RefCell;
 use std::cmp;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::fmt;
 use std::error::Error;
+use std::fmt;
 use std::hash::Hash;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -48,36 +49,30 @@ fn unify_with_subst(
                 _ => {
                     // Extend the substitution with (var -> t_prime) and update all mappings.
                     let mut new_subst = vec![(var.clone(), t_prime.clone())];
-                    new_subst.extend(
-                        subst_var
-                            .iter()
-                            .map(|(x, a)| (x.clone(), subst(&vec![(var.clone(), t_prime.clone())], a))),
-                    );
+                    new_subst.extend(subst_var.iter().map(|(x, a)| {
+                        (x.clone(), subst(&vec![(var.clone(), t_prime.clone())], a))
+                    }));
                     Some(new_subst)
                 }
             }
         }
-        Term::Function(f, ts) => {
-            match t_prime {
-                Term::Variable(var_prime) => {
-                    if vars(t).contains(var_prime) {
-                        None
-                    } else {
-                        let mut new_subst = vec![(var_prime.clone(), t.clone())];
-                        new_subst.extend(
-                            subst_var
-                                .iter()
-                                .map(|(x, a)| (x.clone(), subst(&vec![(var_prime.clone(), t.clone())], a))),
-                        );
-                        Some(new_subst)
-                    }
+        Term::Function(f, ts) => match t_prime {
+            Term::Variable(var_prime) => {
+                if vars(t).contains(var_prime) {
+                    None
+                } else {
+                    let mut new_subst = vec![(var_prime.clone(), t.clone())];
+                    new_subst.extend(subst_var.iter().map(|(x, a)| {
+                        (x.clone(), subst(&vec![(var_prime.clone(), t.clone())], a))
+                    }));
+                    Some(new_subst)
                 }
-                Term::Function(f_prime, ts_prime) if f == f_prime => {
-                    unify_term_lists(subst_var.clone(), ts, ts_prime)
-                }
-                _ => None,
             }
-        }
+            Term::Function(f_prime, ts_prime) if f == f_prime => {
+                unify_term_lists(subst_var.clone(), ts, ts_prime)
+            }
+            _ => None,
+        },
     }
 }
 
@@ -94,14 +89,8 @@ fn unify_term_lists(
         return Some(subst_var);
     }
     let new_subst = unify_with_subst(&subst_var, &terms1[0], &terms2[0])?;
-    let new_terms1: Vec<Term> = terms1[1..]
-        .iter()
-        .map(|t| subst(&new_subst, t))
-        .collect();
-    let new_terms2: Vec<Term> = terms2[1..]
-        .iter()
-        .map(|t| subst(&new_subst, t))
-        .collect();
+    let new_terms1: Vec<Term> = terms1[1..].iter().map(|t| subst(&new_subst, t)).collect();
+    let new_terms2: Vec<Term> = terms2[1..].iter().map(|t| subst(&new_subst, t)).collect();
     unify_term_lists(new_subst, &new_terms1, &new_terms2)
 }
 
@@ -138,10 +127,7 @@ fn critical_pair_parts(term: &Term, rule: &Rule) -> Vec<(Term, SubstitutionSet)>
 }
 
 /// Computes critical pair parts for a list of subterms given a rewrite rule.
-fn critical_pair_parts_list(
-    ts: &[Term],
-    rule: &Rule,
-) -> Vec<(Vec<Term>, SubstitutionSet)> {
+fn critical_pair_parts_list(ts: &[Term], rule: &Rule) -> Vec<(Vec<Term>, SubstitutionSet)> {
     if ts.is_empty() {
         vec![]
     } else {
@@ -175,7 +161,10 @@ fn remove_symmetric_duplicates(pairs: Vec<(Term, Term)>) -> Vec<(Term, Term)> {
     let mut result = Vec::new();
     for pair in pairs.into_iter() {
         let (ref x, ref y) = pair;
-        if !result.iter().any(|(a, b)| (a == y && b == x) || (a == x && b == y)) {
+        if !result
+            .iter()
+            .any(|(a, b)| (a == y && b == x) || (a == x && b == y))
+        {
             result.push(pair);
         }
     }
@@ -271,8 +260,8 @@ fn lpo_ge(pre: &Precedence, t: &Term, t_prime: &Term) -> bool {
             let option1 = symbol_equal(pre, f, f_prime)
                 && lexicographic_greq(&|a, b| lpo_ge(pre, a, b), ts, ts_prime)
                 && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
-            let option2 = symbol_greater(pre, f, f_prime)
-                && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
+            let option2 =
+                symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
             let option3 = ts.iter().any(|tpp| lpo_ge(pre, tpp, t_prime));
             option1 || option2 || option3
         }
@@ -346,7 +335,9 @@ fn compose((r, rules, eqs): (Rule, RuleSet, EquationSet)) -> (Rule, RuleSet, Equ
 
 /// Adds all critical pairs deducible from `r` (with each rule in `r :: rules`)
 /// to the set of equations.
-fn deduce_critical_pairs((r, rules, eqs): (Rule, RuleSet, EquationSet)) -> (Rule, RuleSet, EquationSet) {
+fn deduce_critical_pairs(
+    (r, rules, eqs): (Rule, RuleSet, EquationSet),
+) -> (Rule, RuleSet, EquationSet) {
     let mut new_eqs = eqs;
     let mut r_and_rules = vec![r.clone()];
     r_and_rules.extend(rules.clone());
@@ -499,17 +490,10 @@ fn knuth_bendix_completion_verbose_precedence(pre: &Precedence, eqs: EquationSet
     knuth_bendix_completion_verbose(&|t, t_prime| lpo_gt(pre, t, t_prime), eqs)
 }
 
-
-
-fn knuth_steps<F>(
-    verbose: bool,
-    lpo: &F,
-    state: &(RuleSet, EquationSet),
-) -> (RuleSet, EquationSet)
+fn knuth_steps<F>(verbose: bool, lpo: &F, state: &(RuleSet, EquationSet)) -> (RuleSet, EquationSet)
 where
     F: Fn(&Term, &Term) -> bool,
 {
-
     // Orient, Compose, collapse => if orientable and new rule used
     // simplify, remove trivial => always
 
@@ -529,11 +513,7 @@ where
     }
 }
 
-fn knuth_loop<F>(
-    verbose: bool,
-    lpo: &F,
-    state: (RuleSet, EquationSet),
-) -> (RuleSet, EquationSet)
+fn knuth_loop<F>(verbose: bool, lpo: &F, state: (RuleSet, EquationSet)) -> (RuleSet, EquationSet)
 where
     F: Fn(&Term, &Term) -> bool,
 {
@@ -551,22 +531,57 @@ where
     new_state
 }
 
-
 #[derive(Hash, Debug, PartialEq, Eq)]
-struct Node {
+struct RawNode {
     label: String,
-    // children: Vec<Node>
-    children: Vec<Rc<Node>>
+    children: Vec<Node>,
+    // children: Vec<Rc<Node>>,
 }
+// type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
+#[derive(Debug, Clone)]
+struct Node {
+    id: u32,
+    content: Rc<RefCell<RawNode>>,
+}
+impl Node {
+    fn new(dag:&mut KBEGraph, content: RawNode) -> Node {
+        let id = dag.nodecount;
+        dag.nodecount += 1;
+        Node {
+            id,
+            content: Rc::new(RefCell::new(content)),
+        }
+    }
+    // fn new(dag:&mut KBEGraph, content: RawNode) -> Node {
+    //     let id = dag.nodecount;
+    //     dag.nodecount += 1;
+    //     Node {
+    //         id,
+    //         content: Rc::new(RefCell::new(content)),
+    //     }
+    // }
+}
+impl Hash for Node {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+impl Eq for Node { }
 
 struct KBEGraph {
-    embedding: HashMap<Term, Rc<Node>>,
-    roots : HashSet<Rc<Node>>,
-    parent : HashMap<Rc<Node>, Rc<Node>>
+    embedding: HashMap<Term, Node>,
+    roots: HashSet<Node>,
+    parent: HashMap<Node, (usize,Node)>,
+    nodecount: u32,
 }
 
 // the caller is responsible for the roots
-fn embed(t: &Term, dag: &mut KBEGraph) -> Rc<Node> {
+fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
     // lookup in graph
     if let Some(node) = dag.embedding.get(t) {
         return node.clone();
@@ -574,8 +589,10 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Rc<Node> {
     match t {
         Term::Variable(var) => {
             // variable becomes a leaf (recursive calls will handle parents)
-            let node = Node { label: var.0.clone(), children: vec![] };
-            let node = Rc::new(node);
+            let node = Node::new(dag,
+                var.0.clone(),
+                vec![],
+            );
             dag.embedding.insert(t.clone(), node.clone());
             return node;
         }
@@ -586,10 +603,13 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Rc<Node> {
                 let child = embed(t_prime, dag);
                 children.push(child);
             }
-            let node = Node { label: f.clone(), children: children.iter().cloned().collect() };
+            let node = Node {
+                label: f.clone(),
+                children: children.iter().cloned().collect(),
+            };
             let node = Rc::new(node);
-            for child in children {
-                dag.parent.insert(child, node.clone());
+            for (i, child) in children.into_iter().enumerate() {
+                dag.parent.insert(child, (i as usize, node.clone()));
             }
             dag.embedding.insert(t.clone(), node.clone());
             return node;
@@ -597,28 +617,112 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Rc<Node> {
     }
 }
 
+fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
+    // term instance and subterm
+    fn aux(node: Rc<Node>) -> (Term, Vec<Term>) {
+        let subs: Vec<(Term, Vec<Term>)> = node
+            .children
+            .iter()
+            .map(|child| aux(child.clone()))
+            .collect();
+        let direct_subterms: Vec<Term> = subs.iter().map(|(t, _)| t.clone()).collect();
+        let subterms: Vec<Term> = subs
+            .iter()
+            .map(|(_, subterms)| subterms.clone())
+            .flatten()
+            .chain(direct_subterms.iter().cloned())
+            .collect();
+        let term = Term::Function(
+            node.label.clone(),
+            subs.iter().map(|(t, _)| t.clone()).collect(),
+        );
+        (term, subterms)
+    }
+    // dag.roots.iter().map(|root| aux(root.clone())).map(|(t, subterms)| vec![t].into_iter().chain(subterms.into_iter()).collect()).flatten().collect()
+
+    let mut instances = vec![];
+    for root in dag.roots.iter() {
+        let (t, subterms) = aux(root.clone());
+        instances.push(t);
+        for subterm in subterms {
+            instances.push(subterm);
+        }
+    }
+    instances
+}
+
+fn node_match_term(node: &Rc<Node>, t: &Term) -> bool {
+    match t {
+        Term::Variable(var) => node.label == var.0,
+        Term::Function(f, ts) => {
+            if node.label != f.clone() {
+                return false;
+            }
+            if node.children.len() != ts.len() {
+                return false;
+            }
+            for (child, t_prime) in node.children.iter().zip(ts.iter()) {
+                if !node_match_term(child, t_prime) {
+                    return false;
+                }
+            }
+            true
+        }
+    }
+}
+
+fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> () {
+    fn aux(node: &Rc<Node>, dag: &mut KBEGraph, rule: &Rule) -> () {
+        // top up
+        if node_match_term(node, &rule.0) {
+            // apply rule
+            // (rule destination is already simplified by KBO)
+            let new_node = embed(&rule.1, dag);
+            let (i, parent) = dag.parent.get(node).unwrap();
+            parent.children[*i] = new_node;
+
+        }
+
+
+        // bottom up -> first simplify children, then simplify node
+    }
+    let orig_roots = dag.roots.clone();
+    for root in orig_roots.iter() {
+        aux(root, dag, rule);
+    }
+}
+
+fn simplify_dag(dag: &mut KBEGraph, rules: &RuleSet) -> () {
+    for rule in rules.iter() {
+        simplify_dag_with_rule(dag, rule);
+    }
+}
 
 fn main() {
+
+    // println!("{}","Hello" == "Hello");
+    // println!("{}",&"Hello".to_string() == &"Hello".to_string());
+    // let b = "Hell".to_string();
+    // let b2 = b+"o";
+    // println!("{}",&"Hello".to_string() == &b2);
+    // panic!();
+
     let pre: Precedence = vec![
         (String::from("I"), 3),
         (String::from("M"), 1),
         (String::from("E"), 2),
     ];
-    let mut eqs : EquationSet = parseeqs(vec![
-        "M(M(x,y),z)=M(x,M(y,z))", 
-        "M(I(x),x)=E", 
-        "M(E,x)=x"
-    ]);
-//     { I(M(x, y)) -> M(I(y), I(x))
-//   M(x, M(I(x), z)) -> z
-//   M(x, I(x)) -> E
-//   I(I(x)) -> x
-//   I(E) -> E
-//   M(x, E) -> x
-//   M(I(x), M(x, z)) -> z
-//   M(M(x, y), z) -> M(x, M(y, z))
-//   M(I(x), x) -> E
-//   M(E, x) -> x }
+    let mut eqs: EquationSet = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
+    //     { I(M(x, y)) -> M(I(y), I(x))
+    //   M(x, M(I(x), z)) -> z
+    //   M(x, I(x)) -> E
+    //   I(I(x)) -> x
+    //   I(E) -> E
+    //   M(x, E) -> x
+    //   M(I(x), M(x, z)) -> z
+    //   M(M(x, y), z) -> M(x, M(y, z))
+    //   M(I(x), x) -> E
+    //   M(E, x) -> x }
 
     // test knuth_bendix_completion
     // let rules = knuth_bendix_completion_verbose_precedence(&pre, eqs);
@@ -626,12 +730,11 @@ fn main() {
     // let t_prime = linorm(&rules, &t);
     // println!("{}", strterm(&t_prime));
 
-
-    let mut rules : RuleSet = vec![];
+    let mut rules: RuleSet = vec![];
     // let state = (rules, eqs);
 
-
-    let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
+    // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
+    let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> z
 
     // Step 0
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
@@ -650,7 +753,7 @@ fn main() {
 
     // Step 1
     // TODO: map/ ast graph
-    // we have an ast but keep all old nodes (in a normalized form) as DAG 
+    // we have an ast but keep all old nodes (in a normalized form) as DAG
     // => we want to not overlook possible equalities on old forms
 
     // Node = { label: Symbol, children: Vec<Node> }
@@ -665,7 +768,6 @@ fn main() {
     // => rewrite *(2,x) to >>(x,1), delete the * node, keep the 2 node
     // update the parent pointers
 
-
     // we identify the graph by its embedding of terms
     let mut dag = KBEGraph {
         embedding: HashMap::new(),
@@ -673,27 +775,41 @@ fn main() {
         parent: HashMap::new(),
     };
 
-
-
-
-
+    // Note: our graph is grounded, our rules not necessarily
+    let t_node = embed(&t, &mut dag);
+    dag.roots.insert(t_node.clone());
 
     // Step 2
-    // skipped, even necessary?
-    // put all rules into E
-
+    // we have init R, E in Step 0
 
     // Step 3
-    // Step 3.1 (e-graph phase)
-    // TODO: match using rules (can they ever apply?)/equations (as rules both sides), add ground equations (oriented to R)
-    // normalize left side of rule, match on AST
-
-
-    
-    // Step 3.2 (KBO)
-    // get critical pairs, select promising ones for E
-
     for i in 0..5 {
+        println!();
+        println!();
+        println!("Iteration {}", i);
+        // Step 3.1 (e-graph phase)
+        // TODO: match using rules (can they ever apply?)/equations (as rules both sides), add ground equations (oriented to R)
+        // normalize left side of rule, match on AST
+
+        // fn is_grounded(t: &Term) -> bool {
+        //     match t {
+        //         Term::Variable(_) => false,
+        //         Term::Function(_, ts) => ts.iter().all(|t| is_grounded(t)),
+        //     }
+        // }
+
+        // let mut ground_instances = vec![];
+
+        let ground_instances = ground_instances(&dag);
+        println!("Number of ground instances: {}", ground_instances.len());
+        // for t in ground_instances.iter() {
+        //     println!("  {}", strterm(t));
+        // }
+
+        // Step 3.2 (KBO)
+        // get critical pairs, select promising ones for E
+
+        // for i in 0..5 {
         let mut cps = vec![];
         for rule1 in rules.iter() {
             for rule2 in rules.iter() {
@@ -711,18 +827,13 @@ fn main() {
         let state = knuth_loop(true, &lpo, (rules, eqs));
         rules = state.0;
         eqs = state.1;
-        println!();
-        println!();
-        println!("Iteration {}", i);
         println!("Rules:");
         printrules(&rules);
         println!("Equations:");
         printeqs(&eqs);
+
         println!("Result:");
         let t_prime = linorm(&rules, &t);
         println!("{}", strterm(&t_prime));
     }
-
-
-
 }
