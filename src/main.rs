@@ -536,14 +536,14 @@ struct RawNode {
     label: String,
     children: Vec<Node>,
     // TODO: multiple parents?
-    parent: Option<Node>,
+    parents: Vec<Node>,
 }
 type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
 
 fn Node(label: String, children: Vec<Node>) -> Node {
-    let node = Rc::new(RefCell::new(RawNode { label, children:children.clone(), parent: None }));
+    let node = Rc::new(RefCell::new(RawNode { label, children:children.clone(), parents: vec![] }));
     for child in children.iter() {
-        child.borrow_mut().parent = Some(node.clone());
+        child.borrow_mut().parents.push(node.clone());
     }
     node
 }
@@ -581,7 +581,7 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
                 children.iter().cloned().collect(),
             );
             for child in children.iter() {
-                child.borrow_mut().parent = Some(node.clone());
+                child.borrow_mut().parents.push(node.clone());
             }
             dag.embedding.insert(t.clone(), node.clone());
             return node;
@@ -650,24 +650,18 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> () {
             // apply rule
             // (rule destination is already simplified by KBO)
             let new_node = embed(&rule.1, dag);
-            // only update if not root
-            if let Some(parent_ref) = node.borrow().parent.clone() {
-                let mut parent = parent_ref.borrow_mut();
+            // only update if not root (set children of parents to new node)
+            for parent_pointer in node.borrow().parents.iter() {
+                let mut parent = parent_pointer.borrow_mut();
                 let i = parent.children.iter().position(|child| Rc::ptr_eq(child, node)).unwrap();
                 parent.children[i] = new_node.clone();
-                new_node.borrow_mut().parent = Some(parent_ref.clone());
+                new_node.borrow_mut().parents.push(parent_pointer.clone());
             }
-            // if let Some((i, parent)) = dag.parent.get(node) {
-            //     // update parent
-            //     parent.content.borrow_mut().children[*i] = new_node.clone();
-            //     dag.parent.insert(new_node, (*i, parent.clone()));
-            // }
-            // old children have to be preserved (thus becoming roots)
+            // old children have to be preserved (thus becoming roots / are detached from the node)
             for child in node.borrow().children.iter() {
                 dag.roots.push(child.clone());
-                child.borrow_mut().parent = None;
-                // dag.roots.insert(child.clone());
-                // dag.parent.remove(child);
+                // no pointer comparison for clone reasons and we should never have two different identical nodes
+                child.borrow_mut().parents.retain(|parent| parent != node);
             }
             // visit all new roots recursively (that is the default -> drop down to else)
         }
@@ -675,12 +669,6 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> () {
             aux(child, dag, rule);
         }
     }
-    // let mut visit_roots = dag.roots.iter().cloned().collect::<Vec<Node>>();
-    // while !visit_roots.is_empty() {
-    //     let node = visit_roots.pop().unwrap();
-    //     let new_roots = aux(&node, dag, rule);
-    //     visit_roots.extend(new_roots);
-    // }
 
     let orig_roots = dag.roots.clone();
     for root in orig_roots.iter() {
@@ -696,13 +684,6 @@ fn simplify_dag(dag: &mut KBEGraph, rules: &RuleSet) -> () {
 }
 
 fn main() {
-
-    // println!("{}","Hello" == "Hello");
-    // println!("{}",&"Hello".to_string() == &"Hello".to_string());
-    // let b = "Hell".to_string();
-    // let b2 = b+"o";
-    // println!("{}",&"Hello".to_string() == &b2);
-    // panic!();
 
     let pre: Precedence = vec![
         (String::from("I"), 3),
