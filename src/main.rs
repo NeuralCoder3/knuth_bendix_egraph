@@ -3,6 +3,7 @@ mod types;
 mod util;
 
 use std::cell::RefCell;
+use std::cell::UnsafeCell;
 use std::cmp;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -531,22 +532,24 @@ where
     new_state
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 struct RawNode {
     label: String,
     children: Vec<Node>,
     parents: Vec<Node>,
 }
-type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
+type Node = Rc<UnsafeCell<RawNode>>; // RefCell needed to set parent children pointer
 
 fn Node(label: String, children: Vec<Node>) -> Node {
-    let node = Rc::new(RefCell::new(RawNode {
+    let node = Rc::new(UnsafeCell::new(RawNode {
         label,
         children: children.clone(),
         parents: vec![],
     }));
     for child in children.iter() {
-        child.borrow_mut().parents.push(node.clone());
+        unsafe {
+        (child.get() as *mut RawNode).as_mut().unwrap().parents.push(node.clone());
+        }
     }
     node
 }
@@ -578,7 +581,10 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
             }
             let node = Node(f.clone(), children.iter().cloned().collect());
             for child in children.iter() {
-                child.borrow_mut().parents.push(node.clone());
+                // child.borrow_mut().parents.push(node.clone());
+                unsafe {
+                    (child.get() as *mut RawNode).as_mut().unwrap().parents.push(node.clone());
+                }
             }
             dag.embedding.insert(t.clone(), node.clone());
             return node;
@@ -589,11 +595,18 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
 fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
     // term instance and subterm
     fn aux(node: Node) -> (Term, Vec<Term>) {
-        let subs: Vec<(Term, Vec<Term>)> = node
-            .borrow()
-            .children
-            .iter()
-            .map(|child| aux(child.clone()))
+        unsafe {
+        // let subs: Vec<(Term, Vec<Term>)> = node
+        //     .borrow()
+        //     .children
+        //     .iter()
+        //     .map(|child| aux(child.clone()))
+        //     .collect();
+        let subs: Vec<(Term, Vec<Term>)> = (0..(*node.get()).children.len())
+            .map(|i| {
+                let child = (*node.get()).children[i].clone();
+                aux(child)
+            })
             .collect();
         let direct_subterms: Vec<Term> = subs.iter().map(|(t, _)| t.clone()).collect();
         let subterms: Vec<Term> = subs
@@ -602,11 +615,16 @@ fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
             .flatten()
             .chain(direct_subterms.iter().cloned())
             .collect();
+        // let term = Term::Function(
+        //     node.borrow().label.clone(),
+        //     subs.iter().map(|(t, _)| t.clone()).collect(),
+        // );
         let term = Term::Function(
-            node.borrow().label.clone(),
+            (*node.get()).label.clone(),
             subs.iter().map(|(t, _)| t.clone()).collect(),
         );
         (term, subterms)
+    }
     }
     // dag.roots.iter().map(|root| aux(root.clone())).map(|(t, subterms)| vec![t].into_iter().chain(subterms.into_iter()).collect()).flatten().collect()
 
@@ -622,27 +640,50 @@ fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
 }
 
 fn node_match_term(node: &Node, t: &Term) -> bool {
+    // match t {
+    //     Term::Variable(var) => node.borrow().label == var.0,
+    //     Term::Function(f, ts) => {
+    //         if node.borrow().label != f.clone() {
+    //             return false;
+    //         }
+    //         if node.borrow().children.len() != ts.len() {
+    //             return false;
+    //         }
+    //         for (child, t_prime) in node.borrow().children.iter().zip(ts.iter()) {
+    //             if !node_match_term(child, t_prime) {
+    //                 return false;
+    //             }
+    //         }
+    //         true
+    //     }
+    // }
+    unsafe {
     match t {
-        Term::Variable(var) => node.borrow().label == var.0,
+        Term::Variable(var) => 
+            (*node.get()).label == var.0,
         Term::Function(f, ts) => {
-            if node.borrow().label != f.clone() {
+            if (*node.get()).label != f.clone() {
                 return false;
             }
-            if node.borrow().children.len() != ts.len() {
+            if (*node.get()).children.len() != ts.len() {
                 return false;
             }
-            for (child, t_prime) in node.borrow().children.iter().zip(ts.iter()) {
-                if !node_match_term(child, t_prime) {
+            for i in 0..ts.len() {
+                let child = (*node.get()).children[i].clone();
+                let t_prime = &ts[i];
+                if !node_match_term(&child, t_prime) {
                     return false;
                 }
             }
             true
         }
     }
+    }
 }
 
 fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
     fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> bool {
+        unsafe {
         let mut changed = false;
         // top up
         if node_match_term(node, &rule.0) {
@@ -650,21 +691,51 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
             // (rule destination is already simplified by KBO)
             let new_node = embed(&rule.1, dag);
             // only update if not root (set children of parents to new node)
-            for parent_pointer in node.borrow().parents.iter() {
-                let mut parent = parent_pointer.borrow_mut();
-                let i = parent
+            // for parent_pointer in node.borrow().parents.iter() {
+            //     let mut parent = parent_pointer.borrow_mut();
+            //     let i = parent
+            //         .children
+            //         .iter()
+            //         .position(|child| Rc::ptr_eq(child, node))
+            //         .unwrap();
+            //     parent.children[i] = new_node.clone();
+            //     new_node.borrow_mut().parents.push(parent_pointer.clone());
+            // }
+            // for parent_pointer in (*node.get()).parents.iter() {
+            //     let mut parent = (*parent_pointer.get());//.clone();
+            //     let i = parent
+            //         .children
+            //         .iter()
+            //         .position(|child| Rc::ptr_eq(child, node))
+            //         .unwrap();
+            //     parent.children[i] = new_node.clone();
+            //     unsafe {
+            //         (*new_node.get()).parents.push(parent_pointer.clone());
+            //     }
+            // }
+            for parent_pointer in (*node.get()).parents.iter() {
+                let parent = parent_pointer.clone();
+                let i = (*parent.get())
                     .children
                     .iter()
                     .position(|child| Rc::ptr_eq(child, node))
                     .unwrap();
-                parent.children[i] = new_node.clone();
-                new_node.borrow_mut().parents.push(parent_pointer.clone());
+                (*parent.get())
+                    .children[i] = new_node.clone();
+                (*new_node.get()).parents.push(parent_pointer.clone());
             }
             // old children have to be preserved (thus becoming roots / are detached from the node)
-            for child in node.borrow().children.iter() {
+            // for child in node.borrow().children.iter() {
+            //     dag.roots.push(child.clone());
+            //     // no pointer comparison for clone reasons and we should never have two different identical nodes
+            //     child.borrow_mut().parents.retain(|parent| parent != node);
+            // }
+            for child in (*node.get()).children.iter() {
                 dag.roots.push(child.clone());
                 // no pointer comparison for clone reasons and we should never have two different identical nodes
-                child.borrow_mut().parents.retain(|parent| parent != node);
+                unsafe {
+                    (*child.get()).parents.retain(|parent| !Rc::ptr_eq(parent, node));
+                }
             }
             changed = true;
             // visit all new roots recursively (that is the default -> drop down to else)
@@ -672,10 +743,16 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
         // for child in node.borrow().children.iter() {
         //     aux(child, dag, rule);
         // }
-        node.borrow().children.clone().iter().for_each(|child| {
-            changed |= aux(&child, dag, rule);
-        });
+        // node.borrow().children.clone().iter().for_each(|child| {
+        //     changed |= aux(&child, dag, rule);
+        // });
+        unsafe {
+        for child in (*node.get()).children.iter() {
+            changed |= aux(child, dag, rule);
+        }
+        }
         changed
+    }
     }
 
     let orig_roots = dag.roots.clone();
