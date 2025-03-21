@@ -535,7 +535,6 @@ where
 struct RawNode {
     label: String,
     children: Vec<Node>,
-    // TODO: multiple parents?
     parents: Vec<Node>,
 }
 type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
@@ -730,7 +729,6 @@ fn main() {
     println!("{}", strterm(&t_prime));
 
     // Step 1
-    // TODO: map/ ast graph
     // we have an ast but keep all old nodes (in a normalized form) as DAG
     // => we want to not overlook possible equalities on old forms
 
@@ -766,6 +764,8 @@ fn main() {
         println!("Iteration {}", i);
         // Step 3.1 (e-graph phase)
         // TODO: match using rules (can they ever apply?)/equations (as rules both sides), add ground equations (oriented to R)
+        // Answer: either we need to full unify-match the rules or we handle them all in Step 3.1
+
         // normalize left side of rule, match on AST
 
         // fn is_grounded(t: &Term) -> bool {
@@ -782,6 +782,15 @@ fn main() {
         // for t in ground_instances.iter() {
         //     println!("  {}", strterm(t));
         // }
+
+        for rule in rules.iter() {
+            let (l, r) = rule;
+            // TODO: instantiate all variables from l with some ground instance
+            // apply rule via simplify_dag_with_rule
+        }
+        // same for both sides of eq
+
+
 
         // Step 3.2 (KBO)
         // get critical pairs, select promising ones for E
