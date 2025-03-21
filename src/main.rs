@@ -699,7 +699,7 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
     // TODO: not clone
     let orig_roots = dag.roots.clone();
     let mut changed = false;
-    for root in orig_roots.into_iter() {
+    for mut root in orig_roots.into_iter() {
         changed |= aux(&mut root, dag, rule).0;
     }
     changed
