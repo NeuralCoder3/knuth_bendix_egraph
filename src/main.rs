@@ -531,19 +531,20 @@ where
     new_state
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct RawNode {
     label: String,
     children: Vec<Node>,
     // TODO: handle multiple parents
 }
-type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
+// type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
+type Node = RawNode;
 
 fn Node(label: String, children: Vec<Node>) -> Node {
-    let node = Rc::new(RefCell::new(RawNode {
+    let node = RawNode {
         label,
         children: children.clone(),
-    }));
+    };
     node
 }
 
@@ -583,7 +584,6 @@ fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
     // term instance and subterm
     fn aux(node: Node) -> (Term, Vec<Term>) {
         let subs: Vec<(Term, Vec<Term>)> = node
-            .borrow()
             .children
             .iter()
             .map(|child| aux(child.clone()))
@@ -596,7 +596,7 @@ fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
             .chain(direct_subterms.iter().cloned())
             .collect();
         let term = Term::Function(
-            node.borrow().label.clone(),
+            node.label.clone(),
             subs.iter().map(|(t, _)| t.clone()).collect(),
         );
         (term, subterms)
@@ -616,15 +616,15 @@ fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
 
 fn node_match_term(node: &Node, t: &Term) -> bool {
     match t {
-        Term::Variable(var) => node.borrow().label == var.0,
+        Term::Variable(var) => node.label == var.0,
         Term::Function(f, ts) => {
-            if node.borrow().label != f.clone() {
+            if node.label != f.clone() {
                 return false;
             }
-            if node.borrow().children.len() != ts.len() {
+            if node.children.len() != ts.len() {
                 return false;
             }
-            for (child, t_prime) in node.borrow().children.iter().zip(ts.iter()) {
+            for (child, t_prime) in node.children.iter().zip(ts.iter()) {
                 if !node_match_term(child, t_prime) {
                     return false;
                 }
@@ -636,15 +636,16 @@ fn node_match_term(node: &Node, t: &Term) -> bool {
 
 fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
     // if changed => new node and the children of the old node
-    fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> (bool,Option<(Node, Vec<Node>)>) {
+    fn aux(node: &mut Node, dag: &mut KBEGraph, rule: &Rule) -> (bool,Option<(Node, Vec<Node>)>) {
         let mut changed = false;
-        for i in 0..node.borrow().children.len() {
-            let (child_changed, new_node) = aux(&node.borrow().children[i], dag, rule);
+        for i in 0..node.children.len() {
+            // TODO: at this point, a reading reference to node exists => problem
+            let (child_changed, new_node) = aux(&mut node.children[i], dag, rule);
             changed |= child_changed;
             if let Some((new_node, children)) = new_node {
                 changed = true;
                 // update children
-                node.borrow_mut().children[i] = new_node.clone();
+                node.children[i] = new_node.clone();
                 // update parents
                 // for child in children.iter() {
                 //     child.borrow_mut().parents.retain(|parent| !Rc::ptr_eq(parent, node));
@@ -671,7 +672,7 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
             //     new_node.borrow_mut().parents.push(parent_pointer.clone());
             // }
             // // old children have to be preserved (thus becoming roots / are detached from the node)
-            for child in node.borrow().children.iter() {
+            for child in node.children.iter() {
                 dag.roots.push(child.clone());
             //     // no pointer comparison for clone reasons and we should never have two different identical nodes
             //     child.borrow_mut().parents.retain(|parent| parent != node);
@@ -679,7 +680,7 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
             // changed = true;
             // visit all new roots recursively (that is the default -> drop down to else)
 
-            return (true,Some ((new_node, node.borrow().children.clone())));
+            return (true,Some ((new_node, node.children.clone())));
         }
 
         (changed,None)
@@ -695,10 +696,11 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
         // changed
     }
 
+    // TODO: not clone
     let orig_roots = dag.roots.clone();
     let mut changed = false;
-    for root in orig_roots.iter() {
-        changed |= aux(root, dag, rule).0;
+    for root in orig_roots.into_iter() {
+        changed |= aux(&mut root, dag, rule).0;
     }
     changed
 }
