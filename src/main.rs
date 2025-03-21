@@ -535,7 +535,7 @@ where
 struct RawNode {
     label: String,
     children: Vec<Node>,
-    parents: Vec<Node>,
+    // TODO: handle multiple parents
 }
 type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
 
@@ -543,11 +543,7 @@ fn Node(label: String, children: Vec<Node>) -> Node {
     let node = Rc::new(RefCell::new(RawNode {
         label,
         children: children.clone(),
-        parents: vec![],
     }));
-    for child in children.iter() {
-        child.borrow_mut().parents.push(node.clone());
-    }
     node
 }
 
@@ -577,9 +573,6 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
                 children.push(child);
             }
             let node = Node(f.clone(), children.iter().cloned().collect());
-            for child in children.iter() {
-                child.borrow_mut().parents.push(node.clone());
-            }
             dag.embedding.insert(t.clone(), node.clone());
             return node;
         }
@@ -642,46 +635,70 @@ fn node_match_term(node: &Node, t: &Term) -> bool {
 }
 
 fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
-    fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> bool {
+    // if changed => new node and the children of the old node
+    fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> (bool,Option<(Node, Vec<Node>)>) {
         let mut changed = false;
+        for i in 0..node.borrow().children.len() {
+            let (child_changed, new_node) = aux(&node.borrow().children[i], dag, rule);
+            changed |= child_changed;
+            if let Some((new_node, children)) = new_node {
+                changed = true;
+                // update children
+                node.borrow_mut().children[i] = new_node.clone();
+                // update parents
+                // for child in children.iter() {
+                //     child.borrow_mut().parents.retain(|parent| !Rc::ptr_eq(parent, node));
+                // }
+                // new_node.borrow_mut().parents.push(node.clone());
+            }
+        }
+
+        // let mut changed = false;
         // top up
         if node_match_term(node, &rule.0) {
             // apply rule
             // (rule destination is already simplified by KBO)
             let new_node = embed(&rule.1, dag);
             // only update if not root (set children of parents to new node)
-            for parent_pointer in node.borrow().parents.iter() {
-                let mut parent = parent_pointer.borrow_mut();
-                let i = parent
-                    .children
-                    .iter()
-                    .position(|child| Rc::ptr_eq(child, node))
-                    .unwrap();
-                parent.children[i] = new_node.clone();
-                new_node.borrow_mut().parents.push(parent_pointer.clone());
-            }
-            // old children have to be preserved (thus becoming roots / are detached from the node)
+            // for parent_pointer in node.borrow().parents.iter() {
+            //     let mut parent = parent_pointer.borrow_mut();
+            //     let i = parent
+            //         .children
+            //         .iter()
+            //         .position(|child| Rc::ptr_eq(child, node))
+            //         .unwrap();
+            //     parent.children[i] = new_node.clone();
+            //     new_node.borrow_mut().parents.push(parent_pointer.clone());
+            // }
+            // // old children have to be preserved (thus becoming roots / are detached from the node)
             for child in node.borrow().children.iter() {
                 dag.roots.push(child.clone());
-                // no pointer comparison for clone reasons and we should never have two different identical nodes
-                child.borrow_mut().parents.retain(|parent| parent != node);
+            //     // no pointer comparison for clone reasons and we should never have two different identical nodes
+            //     child.borrow_mut().parents.retain(|parent| parent != node);
             }
-            changed = true;
+            // changed = true;
             // visit all new roots recursively (that is the default -> drop down to else)
+
+            return (true,Some ((new_node, node.borrow().children.clone())));
         }
+
+        (changed,None)
+        // None
+
+
         // for child in node.borrow().children.iter() {
         //     aux(child, dag, rule);
         // }
-        node.borrow().children.clone().iter().for_each(|child| {
-            changed |= aux(&child, dag, rule);
-        });
-        changed
+        // node.borrow().children.clone().iter().for_each(|child| {
+        //     changed |= aux(&child, dag, rule);
+        // });
+        // changed
     }
 
     let orig_roots = dag.roots.clone();
     let mut changed = false;
     for root in orig_roots.iter() {
-        changed |= aux(root, dag, rule);
+        changed |= aux(root, dag, rule).0;
     }
     changed
 }
