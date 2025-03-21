@@ -540,7 +540,11 @@ struct RawNode {
 type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
 
 fn Node(label: String, children: Vec<Node>) -> Node {
-    let node = Rc::new(RefCell::new(RawNode { label, children:children.clone(), parents: vec![] }));
+    let node = Rc::new(RefCell::new(RawNode {
+        label,
+        children: children.clone(),
+        parents: vec![],
+    }));
     for child in children.iter() {
         child.borrow_mut().parents.push(node.clone());
     }
@@ -561,10 +565,7 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
     match t {
         Term::Variable(var) => {
             // variable becomes a leaf (recursive calls will handle parents)
-            let node = Node(
-                var.0.clone(),
-                vec![],
-            );
+            let node = Node(var.0.clone(), vec![]);
             dag.embedding.insert(t.clone(), node.clone());
             return node;
         }
@@ -575,10 +576,7 @@ fn embed(t: &Term, dag: &mut KBEGraph) -> Node {
                 let child = embed(t_prime, dag);
                 children.push(child);
             }
-            let node = Node(
-                f.clone(),
-                children.iter().cloned().collect(),
-            );
+            let node = Node(f.clone(), children.iter().cloned().collect());
             for child in children.iter() {
                 child.borrow_mut().parents.push(node.clone());
             }
@@ -592,7 +590,8 @@ fn ground_instances(dag: &KBEGraph) -> Vec<Term> {
     // term instance and subterm
     fn aux(node: Node) -> (Term, Vec<Term>) {
         let subs: Vec<(Term, Vec<Term>)> = node
-            .borrow().children
+            .borrow()
+            .children
             .iter()
             .map(|child| aux(child.clone()))
             .collect();
@@ -642,8 +641,9 @@ fn node_match_term(node: &Node, t: &Term) -> bool {
     }
 }
 
-fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> () {
-    fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> () { 
+fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
+    fn aux(node: &Node, dag: &mut KBEGraph, rule: &Rule) -> bool {
+        let mut changed = false;
         // top up
         if node_match_term(node, &rule.0) {
             // apply rule
@@ -652,7 +652,11 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> () {
             // only update if not root (set children of parents to new node)
             for parent_pointer in node.borrow().parents.iter() {
                 let mut parent = parent_pointer.borrow_mut();
-                let i = parent.children.iter().position(|child| Rc::ptr_eq(child, node)).unwrap();
+                let i = parent
+                    .children
+                    .iter()
+                    .position(|child| Rc::ptr_eq(child, node))
+                    .unwrap();
                 parent.children[i] = new_node.clone();
                 new_node.borrow_mut().parents.push(parent_pointer.clone());
             }
@@ -662,28 +666,70 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> () {
                 // no pointer comparison for clone reasons and we should never have two different identical nodes
                 child.borrow_mut().parents.retain(|parent| parent != node);
             }
+            changed = true;
             // visit all new roots recursively (that is the default -> drop down to else)
         }
-        for child in node.borrow().children.iter() {
-            aux(child, dag, rule);
-        }
+        // for child in node.borrow().children.iter() {
+        //     aux(child, dag, rule);
+        // }
+        node.borrow().children.clone().iter().for_each(|child| {
+            changed |= aux(&child, dag, rule);
+        });
+        changed
     }
 
     let orig_roots = dag.roots.clone();
+    let mut changed = false;
     for root in orig_roots.iter() {
-        aux(root, dag, rule);
+        changed |= aux(root, dag, rule);
     }
+    changed
 }
 
 // expect grounded rules
-fn simplify_dag(dag: &mut KBEGraph, rules: &RuleSet) -> () {
+fn simplify_dag(dag: &mut KBEGraph, rules: &RuleSet, ground_instances: &Vec<Term>) -> RuleSet {
+    let mut output = vec![];
     for rule in rules.iter() {
-        simplify_dag_with_rule(dag, rule);
+        let (l, r) = rule;
+        // instantiate all variables from l with some ground instance
+        // apply rule via simplify_dag_with_rule
+        let vars = vars(l)
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let insts = instantiations(&vars, &ground_instances);
+        for inst in insts.iter() {
+            let l_inst = subst(inst, l);
+            let r_inst = subst(inst, r);
+            let rule_inst = (l_inst, r_inst);
+            let changed = simplify_dag_with_rule(dag, &rule_inst);
+            if changed {
+                output.push(rule_inst);
+            }
+        }
     }
+    output
+}
+
+fn instantiations(vars: &Vec<VarSym>, t: &Vec<Term>) -> Vec<SubstitutionSet> {
+    if vars.is_empty() {
+        return vec![vec![]];
+    }
+    let mut result = vec![];
+    let var = &vars[0];
+    for t_prime in t.iter() {
+        let mut insts = instantiations(&vars[1..].to_vec(), t);
+        for inst in insts.iter_mut() {
+            inst.push((var.clone(), t_prime.clone()));
+        }
+        result.extend(insts);
+    }
+    result
 }
 
 fn main() {
-
     let pre: Precedence = vec![
         (String::from("I"), 3),
         (String::from("M"), 1),
@@ -716,9 +762,12 @@ fn main() {
     // Step 0
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
     // we changed (by init) our R/E, so KBO
-    let state = knuth_loop(true, &lpo, (rules, eqs));
-    rules = state.0;
-    eqs = state.1;
+    #[cfg(use_knuth)]
+    {
+        let state = knuth_loop(true, &lpo, (rules, eqs));
+        rules = state.0;
+        eqs = state.1;
+    }
 
     let t_prime = linorm(&rules, &t);
     println!("Rules:");
@@ -783,14 +832,29 @@ fn main() {
         //     println!("  {}", strterm(t));
         // }
 
-        for rule in rules.iter() {
-            let (l, r) = rule;
-            // TODO: instantiate all variables from l with some ground instance
-            // apply rule via simplify_dag_with_rule
-        }
-        // same for both sides of eq
+        // rules + ->eq + <-eq
+        rules.extend(simplify_dag(&mut dag, &rules, &ground_instances));
+        rules.extend(simplify_dag(&mut dag, &eqs.iter().map(|(l, r)| (l.clone(), r.clone())).collect(), &ground_instances));
+        rules.extend(simplify_dag(&mut dag, &eqs.iter().map(|(l, r)| (r.clone(), l.clone())).collect(), &ground_instances));
 
-
+        // for rule in rules.iter() {
+        //     let (l, r) = rule;
+        //     // instantiate all variables from l with some ground instance
+        //     // apply rule via simplify_dag_with_rule
+        //     let vars = vars(l)
+        //         .iter()
+        //         .cloned()
+        //         .collect::<HashSet<_>>()
+        //         .into_iter()
+        //         .collect::<Vec<_>>();
+        //     let insts = instantiations(&vars, &ground_instances);
+        //     for inst in insts.iter() {
+        //         let l_inst = subst(inst, l);
+        //         let r_inst = subst(inst, r);
+        //         let rule_inst = (l_inst, r_inst);
+        //         simplify_dag_with_rule(&mut dag, &rule_inst);
+        //     }
+        // }
 
         // Step 3.2 (KBO)
         // get critical pairs, select promising ones for E
@@ -808,11 +872,14 @@ fn main() {
         //     println!("{} ! {}", strterm(l), strterm(r));
         // }
 
-        // TODO: only add some critical pairs (ematch or grounded)
-        eqs.extend(cps);
-        let state = knuth_loop(true, &lpo, (rules, eqs));
-        rules = state.0;
-        eqs = state.1;
+        #[cfg(use_knuth)]
+        {
+            // TODO: only add some critical pairs (ematch or grounded)
+            eqs.extend(cps);
+            let state = knuth_loop(true, &lpo, (rules, eqs));
+            rules = state.0;
+            eqs = state.1;
+        }
         println!("Rules:");
         printrules(&rules);
         println!("Equations:");
