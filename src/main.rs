@@ -531,6 +531,11 @@ where
     new_state
 }
 
+
+
+// some id:usize outside, with map (C) usize -> Node  (bidirectional)
+// term -> id: construct analogous nod, look up in inverse C
+
 #[derive(Debug, Clone)]
 struct RawNode {
     label: String,
@@ -549,8 +554,8 @@ fn Node(label: String, children: Vec<Node>) -> Node {
 }
 
 struct KBEGraph {
-    embedding: HashMap<Term, Node>,
-    roots: Vec<Node>,
+    embedding: HashMap<Term, Node>, // TODO: only 
+    roots: Vec<Node>, // we can use keys of C instead
 }
 
 // the caller is responsible for the roots
@@ -677,6 +682,7 @@ fn simplify_dag_with_rule(dag: &mut KBEGraph, rule: &Rule) -> bool {
             //     // no pointer comparison for clone reasons and we should never have two different identical nodes
             //     child.borrow_mut().parents.retain(|parent| parent != node);
             }
+            // TODO: remove node from graph (roots)
             // changed = true;
             // visit all new roots recursively (that is the default -> drop down to else)
 
@@ -776,17 +782,17 @@ fn main() {
     // let state = (rules, eqs);
 
     // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
-    let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> z
+    let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
 
     // Step 0
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
     // we changed (by init) our R/E, so KBO
-    #[cfg(use_knuth)]
-    {
+    // #[cfg(use_knuth)]
+    // {
         let state = knuth_loop(true, &lpo, (rules, eqs));
         rules = state.0;
         eqs = state.1;
-    }
+    // }
 
     let t_prime = linorm(&rules, &t);
     println!("Rules:");
@@ -847,9 +853,9 @@ fn main() {
 
         let ground_instances = ground_instances(&dag);
         println!("Number of ground instances: {}", ground_instances.len());
-        // for t in ground_instances.iter() {
-        //     println!("  {}", strterm(t));
-        // }
+        for t in ground_instances.iter() {
+            println!("  {}", strterm(t));
+        }
 
         // rules + ->eq + <-eq
         rules.extend(simplify_dag(&mut dag, &rules, &ground_instances));
@@ -891,14 +897,14 @@ fn main() {
         //     println!("{} ! {}", strterm(l), strterm(r));
         // }
 
-        #[cfg(use_knuth)]
-        {
+        // #[cfg(use_knuth)]
+        // {
             // TODO: only add some critical pairs (ematch or grounded)
             eqs.extend(cps);
             let state = knuth_loop(true, &lpo, (rules, eqs));
             rules = state.0;
             eqs = state.1;
-        }
+        // }
         println!("Rules:");
         printrules(&rules);
         println!("Equations:");
