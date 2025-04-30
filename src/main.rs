@@ -3,18 +3,10 @@ mod types;
 mod util;
 mod kbo;
 
-use std::cell::RefCell;
-use std::cmp;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::error::Error;
-use std::fmt;
-use std::hash::Hash;
-use std::rc::Rc;
-use std::str::FromStr;
 
 use term_rewrite::parseeqs;
-use term_rewrite::uniquevar;
 
 use crate::term_rewrite::*;
 use crate::types::*;
