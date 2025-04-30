@@ -1,0 +1,55 @@
+Knuth-bendix e-graphs:
+
+A Knuth-bendix e-graph is a triple (C, E, R):
+- C is a map `Id -> ENode` (Ids identify "e-classes")
+- E is a set of unoriented equations `lhs = rhs`
+- R is a set of oriented equations `lhs -> rhs`
+
+Each key x from C is an e-class id.
+The canonical term of an e-class x is the term obtained from x, by applying the C map recursively.
+We use an Id x with its canonical term interchangeably.
+
+Algorithm:
+Knuth-bendix equality saturation:
+Goal: Given a set of ground terms T, and a set of equations E, determine canonical terms (up to E) for all terms in T.
+
+step 0: fix a knuth-bendix ordering.
+step 1: put all terms from T, and its recursive children into C (hashconsed like in an e-graph)
+step 2: put all input rules into E.
+step 3: "the main loop"
+step 3.1: "e-graph growth phase":
+- ematch using the oriented & unoriented but not antioriented rules, and
+  add the resulting ground equations to R.
+Note: a rule "x -> y" is antioriented, if "y -> x" is an oriented rule.
+
+step 3.2: "critical pair phase":
+- compute critical pairs, and add the "top cut" of high "quality" critical pairs to E.
+-- The quality can be measured by either
+-- option 1: The amount of (ground) rules from R that would be subsumed by it
+-- option 2: The amount of ematch matches against said rule.
+
+step 4: find the normal form of a term t:
+... by applying the rules from R until you reach a fixed point, to check equality.
+We call the resulting canonical term "lookup(t)"
+
+ematch algorithm:
+if you want to ematch against some pattern with pvars:
+simply brute-force all possible values of these pvars (value in this case means e-class Id),
+and then "lookup" the resulting terms, to see whether they land in C.
+
+Implicit Invariants, will be enforced implicitly in every operation:
+Apply all the knuth-bendix simplification rules until converged:
+- (Delete) remove equations `x=x` from E
+- (Compose) if s -> t and t -> u, then add s -> u, and remove s -> t.
+- (Simplify) if s = t and t -> u, then add s = u, and remove s = t.
+- (Orient) if s=t in E and s > t, then move it to R as s -> t.
+- (Collapse) if s -> t and s -> u [and some fancy KB props that prevent a critical pair], add u=t
+- NO (Deduce): we don't add a critical pair here.
+
+Whenever any canonical term from C can be simplified using a rule from R,
+simplify the term and add all necessary new subterms to C.
+The old canonical term gets removed, but only it's "head"; all the children remain existent as long as they are still "canonical".
+
+Notes:
+- E and R shall be stored as one discrimination tree.
+- Note: As R might not be confluent, we need to choose a deterministic system by which we normalize using R.
