@@ -1,18 +1,16 @@
+mod kbo;
 mod term_rewrite;
 mod types;
 mod util;
-mod kbo;
 
-use std::collections::HashMap;
 use std::collections::HashSet;
-
+use std::collections::HashMap;
 use bimap::BiMap;
 use term_rewrite::parseeqs;
 
+use crate::kbo::*;
 use crate::term_rewrite::*;
 use crate::types::*;
-use crate::kbo::*;
-
 
 fn knuth_steps<F>(verbose: bool, lpo: &F, state: &(RuleSet, EquationSet)) -> (RuleSet, EquationSet)
 where
@@ -55,19 +53,13 @@ where
     new_state
 }
 
-
-
-#[derive(Debug, Clone,PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ENode {
     label: String, // TODO: globalize in table for efficiency
     children: Vec<Id>,
 }
 
-type Id = usize; 
-
-
-
-
+type Id = usize;
 
 // // some id:usize outside, with map (C) usize -> Node  (bidirectional)
 // // term -> id: construct analogous nod, look up in inverse C
@@ -89,15 +81,92 @@ type Id = usize;
 //     node
 // }
 
+#[allow(non_snake_case)]
 struct KBEGraph {
-    C:  BiMap<Id, ENode>, // can be done as Vec<ENode> with id as index, and an additional C_inv
+    C: BiMap<Id, ENode>, // can be done as Vec<ENode> with id as index, and an additional C_inv
     id_count: usize,
     E: EquationSet,
     R: RuleSet,
 }
 
-fn main() {
+/*
+    insert a term into the KBE graph
+*/
+fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
+    match t {
+        Term::Variable(var) => {
+            // variable becomes a leaf (recursive calls will handle parents)
+            let node = ENode {
+                label: var.0.clone(),
+                children: vec![],
+            };
+            #[allow(non_snake_case)]
+            let C = &mut kbe.C;
+            if let Some(id) = C.get_by_right(&node) {
+                return id.clone();
+            }
+            let id = kbe.id_count;
+            kbe.id_count += 1;
+            C.insert_no_overwrite(id, node).unwrap();
+            return id;
+        }
+        Term::Function(f, ts) => {
+            // embed all children, then create a new node (keep track of parent)
+            let mut children = vec![];
+            for t_prime in ts {
+                let child = insert_term(t_prime, kbe);
+                children.push(child);
+            }
+            let node = ENode {
+                label: f.clone(),
+                children,
+            };
+            if let Some(id) = kbe.C.get_by_right(&node) {
+                return id.clone();
+            }
+            let id = kbe.id_count;
+            kbe.id_count += 1;
+            kbe.C.insert_no_overwrite(id, node).unwrap();
+            return id;
+        }
+    }
+}
 
+/*
+    with C, recursively extracts all ground terms from the graph
+*/
+fn ground_instances(
+    visited: &mut HashMap<ENode, Term>,
+    instances: &mut HashSet<Term>,
+    node: &ENode,
+    kbe: &KBEGraph,
+) -> Term {
+    if visited.contains_key(node) {
+        return visited[node].clone();
+    }
+    let mut children = vec![];
+    for child in node.children.iter() {
+        let child_node = kbe.C.get_by_left(child).unwrap();
+        let child_node = ground_instances(visited, instances, child_node, kbe);
+        children.push(child_node.clone());
+    }
+    let term = Term::Function(node.label.clone(), children);
+    visited.insert(node.clone(), term.clone());
+    instances.insert(term.clone());
+    term
+}
+
+/*
+    rewrites the kbe graph with a grounded rule
+*/
+fn rewriteRule(
+
+    rule: &Rule,
+) {
+
+}
+
+fn main() {
     let mut kbe = KBEGraph {
         C: BiMap::new(),
         id_count: 0,
@@ -113,46 +182,7 @@ fn main() {
     ];
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
-
     // Step 1
-    fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
-        match t {
-            Term::Variable(var) => {
-                // variable becomes a leaf (recursive calls will handle parents)
-                let node = ENode {
-                    label: var.0.clone(),
-                    children: vec![],
-                };
-                let C = &mut kbe.C;
-                if let Some(id) = C.get_by_right(&node) {
-                    return id.clone();
-                }
-                let id = kbe.id_count;
-                kbe.id_count += 1;
-                C.insert_no_overwrite(id, node).unwrap();
-                return id;
-            }
-            Term::Function(f, ts) => {
-                // embed all children, then create a new node (keep track of parent)
-                let mut children = vec![];
-                for t_prime in ts {
-                    let child = insert_term(t_prime, kbe);
-                    children.push(child);
-                }
-                let node = ENode {
-                    label: f.clone(),
-                    children,
-                };
-                if let Some(id) = kbe.C.get_by_right(&node) {
-                    return id.clone();
-                }
-                let id = kbe.id_count;
-                kbe.id_count += 1;
-                kbe.C.insert_no_overwrite(id, node).unwrap();
-                return id;
-            }
-        }
-    }
 
     // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
     let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
@@ -173,8 +203,56 @@ fn main() {
     println!("Result:");
     println!("{}", strterm(&t_prime));
 
-
     // Step 3 (loop)
+    for i in 0..5 {
+        println!();
+        println!();
+        println!("Iteration {}", i);
 
+        // Step 3.1 (E-Graph: Apply rules on graph)
+        // TODO: without 3.2 this would not resolve as equations are oriented
+        // we would just eagerly rewrite the graph? 
+        // let ground_instances = ground_instances(&kbe);
+        let mut instances: HashSet<Term> = HashSet::new();
+        let mut visited : HashMap<ENode, Term> = HashMap::new();
+        for (_,enode) in kbe.C.iter() {
+            let _ = ground_instances(&mut visited, &mut instances, enode, &kbe);
+        }
+        println!("Number of ground instances: {}", instances.len());
+        for t in instances.iter() {
+            println!("  {}", strterm(t));
+        }
 
+        // // rules + ->eq + <-eq
+        kbe.R.extend(simplify_dag(&mut kbe, &rules, &ground_instances));
+        // rules.extend(simplify_dag(&mut dag, &eqs.iter().map(|(l, r)| (l.clone(), r.clone())).collect(), &ground_instances));
+        // rules.extend(simplify_dag(&mut dag, &eqs.iter().map(|(l, r)| (r.clone(), l.clone())).collect(), &ground_instances));
+
+        // Step 3.2 (KBO: Add critical pairs)
+        let mut cps = vec![];
+        for rule1 in kbe.R.iter() {
+            for rule2 in kbe.R.iter() {
+                let cp = critical_pair(rule1, rule2);
+                cps.extend(cp);
+            }
+        }
+        // TODO: only add some critical pairs (ematch or grounded (how many from R are subsumed))
+        // kbe.E.extend(cps);
+        let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
+        kbe.R = state.0;
+        kbe.E = state.1;
+
+        println!("Intermediate State:");
+        println!("Rules:");
+        printrules(&kbe.R);
+        println!("Equations:");
+        printeqs(&kbe.E);
+
+        println!("Result:");
+        let t_prime = linorm(&kbe.R, &t);
+        println!("{}", strterm(&t_prime));
+    }
+
+    // match using R and E (ground instances)
+    // add matched ones to R
 }
