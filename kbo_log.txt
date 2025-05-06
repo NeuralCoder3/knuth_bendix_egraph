@@ -1,0 +1,337 @@
+critical pair 
+
+l0 -> r0
+l1 -> r1
+
+l1 in l0 
+
+then l0 with r1 there
+and  r0 (under subst)
+
+
+
+
+================ Input ==================
+{ M(M(x, y), z) = M(x, M(y, z))
+  M(I(x), x) = E
+  M(E, x) = x }
+Deduction:
+{ }
+================ Step 1 =================
+{ M(M(x, y), z) = M(x, M(y, z))
+  M(I(x), x) = E }
+
+{ M(E, x) -> x }
+Deduction:
+{ }
+================ Step 2 =================
+{ M(M(x, y), z) = M(x, M(y, z)) }
+
+{ M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(M(x_1, M(y_1, z_1)), z) = M(M(x_1, y_1), M(z_1, z))
+  M(M(x, M(y, z)), z_1) = M(M(x, y), M(z, z_1))
+  M(E, z) = M(I(x_1), M(x_1, z))     // from M(M(I(x_1),x_1), z)
+  M(x_1, z) = M(E, M(x_1, z)) }      // from M(M(E, x_1), z)
+================ Step 3 =================
+{ z = M(I(x_1), M(x_1, z)) }
+
+{ M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(I(I(x)), z_1) = M(x, z_1)
+  M(I(I(x_1)), z) = M(x_1, z)
+  M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  M(z, z_1) = M(I(x_1), M(M(x_1, z), z_1))
+  M(I(I(x)), E) = x
+  M(I(E), x) = x }
+================ Step 4 =================
+{ M(I(I(x)), z_1) = M(x, z_1)
+  M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  M(I(I(x)), E) = x
+  M(I(E), x) = x }
+
+{ M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ z = M(E, z)
+  M(I(I(E)), x) = x
+  M(x, z) = M(I(E), M(x, z)) }
+================ Step 5 =================
+{ M(I(I(x)), z_1) = M(x, z_1)
+  M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  M(I(I(x)), E) = x
+  M(I(I(E)), x) = x }
+
+{ M(I(E), x) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ z = M(x, M(I(x), z))
+  M(I(I(I(x))), M(x, z_1)) = z_1
+  M(M(x, z_1), z) = M(I(I(x)), M(z_1, z))
+  E = M(x, I(x)) }
+================ Step 6 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  M(x, E) = x
+  z = M(x, M(I(x), z))
+  E = M(x, I(x)) }
+
+{ M(I(I(x)), z_1) -> M(x, z_1)
+  M(I(E), x) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(x_1, E) = I(I(x_1))
+  E = I(E)
+  M(I(x), x) = E
+  M(x_1, M(y, E)) = M(x_1, y)
+  M(x, z) = M(x, M(E, z))
+  E = I(E) }
+================ Step 7 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  z = M(x, M(I(x), z))
+  E = M(x, I(x))
+  x_1 = I(I(x_1))
+  E = I(E) }
+
+{ M(x, E) -> x
+  M(I(I(x)), z_1) -> M(x, z_1)
+  M(I(E), x) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(I(E), z_1) = M(E, z_1)
+  M(E, x) = x
+  M(E, M(E, z)) = z
+  M(E, E) = E }
+================ Step 8 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  z = M(x, M(I(x), z))
+  E = M(x, I(x))
+  x_1 = I(I(x_1)) }
+
+{ I(E) -> E
+  M(x, E) -> x
+  M(I(I(x)), z_1) -> M(x, z_1)
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ I(E) = E
+  M(x_1, M(I(x_1), z)) = z
+  M(x_1, I(x_1)) = E }
+================ Step 9 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  z = M(x, M(I(x), z))
+  E = M(x, I(x)) }
+
+{ I(I(x_1)) -> x_1
+  I(E) -> E
+  M(x, E) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(I(x_1), x_1) = E
+  M(E, E) = E
+  M(I(x), E) = I(x)
+  M(x_1, M(y, I(M(x_1, y)))) = E
+  M(E, z) = M(x, M(I(x), z))
+  I(E) = E }
+================ Step 10 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  z = M(x, M(I(x), z))
+  M(x_1, M(y, I(M(x_1, y)))) = E }
+
+{ M(x, I(x)) -> E
+  I(I(x_1)) -> x_1
+  I(E) -> E
+  M(x, E) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(x, z_1) = M(I(I(x)), z_1)
+  M(x_1, z) = M(I(I(x_1)), z)
+  M(x, E) = I(I(x))
+  M(I(x_1), M(x_1, z)) = z
+  M(E, M(E, z)) = z
+  M(x, I(x)) = E
+  M(x_1, M(y, M(I(M(x_1, y)), z))) = z
+  M(z, z_1) = M(x, M(M(I(x), z), z_1))
+  M(x_1, E) = x_1
+  M(I(E), z) = z }
+================ Step 11 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  M(x_1, M(y, I(M(x_1, y)))) = E
+  M(x_1, M(y, M(I(M(x_1, y)), z))) = z }
+
+{ M(x, M(I(x), z)) -> z
+  M(x, I(x)) -> E
+  I(I(x_1)) -> x_1
+  I(E) -> E
+  M(x, E) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(x, M(M(y_1, I(M(x, y_1))), I(E))) = E
+  M(x_1, M(M(y, I(M(x_1, y))), I(E))) = E
+  I(M(x, I(x))) = E
+  M(x, M(M(I(x), z), I(z))) = E
+  E = I(M(x_1, I(x_1)))
+  M(x, E) = M(y, I(M(I(x), y)))
+  M(x, M(I(x), I(E))) = E
+  M(x, M(E, I(x))) = E
+  I(M(I(x), x)) = E
+  M(I(x), M(M(x, z), I(z))) = E
+  E = I(M(I(y), y))
+  M(I(x_1), E) = M(y, I(M(x_1, y)))
+  M(x, M(y_1, M(y, I(M(M(x, y_1), y))))) = E
+  M(x_1, M(x, M(y_1, I(M(x_1, M(x, y_1)))))) = E
+  M(M(x, y_1), M(z, I(M(x, M(y_1, z))))) = E
+  M(E, z) = M(x_1, M(M(y, I(M(x_1, y))), z))
+  M(I(x), M(x, I(E))) = E
+  M(y, I(M(E, y))) = E
+  M(x_1, I(M(x_1, E))) = E
+  M(E, M(x, I(x))) = E }
+================ Step 12 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  M(x_1, M(y, M(I(M(x_1, y)), z))) = z
+  x = M(y, I(M(I(x), y)))
+  I(x_1) = M(y, I(M(x_1, y)))
+  M(x, M(y_1, M(y, I(M(x, M(y_1, y)))))) = E }
+
+{ M(x_1, M(y, I(M(x_1, y)))) -> E
+  M(x, M(I(x), z)) -> z
+  M(x, I(x)) -> E
+  I(I(x_1)) -> x_1
+  I(E) -> E
+  M(x, E) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(I(M(x, y_1)), I(I(x))) = I(y_1)
+  M(I(M(x_1, y)), I(I(x_1))) = I(y)
+  M(M(y_1, I(M(x, y_1))), I(E)) = I(x)
+  M(x_1, I(x_1)) = E
+  M(y, M(I(M(x_1, y)), I(I(x_1)))) = E
+  M(M(I(x), z), I(z)) = I(x)
+  M(x, I(x_1)) = I(M(x_1, I(x)))
+  M(I(x), I(E)) = I(x)
+  M(E, I(x)) = I(x)
+  M(M(x, z), I(z)) = I(I(x))
+  M(I(y), I(x_1)) = I(M(x_1, y))
+  M(x, M(y_1, I(M(x_1, M(x, y_1))))) = I(x_1)
+  M(z, I(M(x, M(y_1, z)))) = I(M(x, y_1))
+  M(I(x_1), z) = M(y, M(I(M(x_1, y)), z))
+  M(x, I(E)) = I(I(x))
+  I(M(x_1, E)) = I(x_1)
+  M(x, I(x)) = I(E) }
+================ Step 13 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  M(x_1, M(y, M(I(M(x_1, y)), z))) = z
+  M(x, M(y_1, M(y, I(M(x, M(y_1, y)))))) = E
+  M(I(M(x, y_1)), x) = I(y_1)
+  M(y, M(I(M(x_1, y)), x_1)) = E
+  M(x, I(x_1)) = I(M(x_1, I(x)))
+  M(I(y), I(x_1)) = I(M(x_1, y))
+  M(x, M(y_1, I(M(x_1, M(x, y_1))))) = I(x_1)
+  M(z, I(M(x, M(y_1, z)))) = I(M(x, y_1))
+  M(I(x_1), z) = M(y, M(I(M(x_1, y)), z)) }
+
+{ M(y, I(M(x_1, y))) -> I(x_1)
+  M(x, M(I(x), z)) -> z
+  M(x, I(x)) -> E
+  I(I(x_1)) -> x_1
+  I(E) -> E
+  M(x, E) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ I(M(x_1, M(x_1, I(x_2)))) = M(M(x_2, I(x_1)), I(x_1))
+  I(I(x_2)) = M(M(x_2, y), I(y))
+  M(I(x), M(x, I(x_1))) = I(x_1)
+  M(M(x_1, I(x)), M(M(x, I(x_1)), z)) = z
+  I(E) = M(x_2, I(x_2))
+  M(M(x_1, I(x)), M(x, I(x_1))) = E
+  I(M(x_1, x_2)) = M(I(x_2), I(x_1))
+  I(M(x, I(x_1))) = M(x_1, I(x))
+  I(M(x_1, E)) = M(E, I(x_1))
+  M(M(x, I(x_1)), M(M(x_1, I(x)), z)) = z
+  I(M(x_2, M(y, I(x)))) = M(x, I(M(x_2, y)))
+  I(E) = M(x, I(I(I(x))))
+  M(M(x, I(x_1)), M(x_1, I(x))) = E
+  I(I(x)) = M(x, I(E)) }
+================ Step 14 =================
+{ M(I(M(x, y)), M(x, M(y, z_1))) = z_1
+  M(x_1, M(y, M(I(M(x_1, y)), z))) = z
+  M(x, M(y_1, M(y, I(M(x, M(y_1, y)))))) = E
+  M(I(M(x, y_1)), x) = I(y_1)
+  M(y, M(I(M(x_1, y)), x_1)) = E
+  M(I(y), I(x_1)) = I(M(x_1, y))
+  M(x, M(y_1, I(M(x_1, M(x, y_1))))) = I(x_1)
+  M(z, I(M(x, M(y_1, z)))) = I(M(x, y_1))
+  M(I(x_1), z) = M(y, M(I(M(x_1, y)), z))
+  I(M(x_1, M(x_1, I(x_2)))) = M(x_2, M(I(x_1), I(x_1)))
+  I(M(x_2, M(y, I(x)))) = M(x, I(M(x_2, y))) }
+
+{ I(M(x_1, I(x))) -> M(x, I(x_1))
+  M(y, I(M(x_1, y))) -> I(x_1)
+  M(x, M(I(x), z)) -> z
+  M(x, I(x)) -> E
+  I(I(x_1)) -> x_1
+  I(E) -> E
+  M(x, E) -> x
+  M(I(x_1), M(x_1, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }
+Deduction:
+{ M(x, I(x)) = M(I(I(x)), I(x))
+  M(I(I(x_1)), I(x_1)) = M(x_1, I(x_1))
+  I(M(M(x_1, y), M(I(y), I(x_1)))) = M(M(x_1, y), I(M(x_1, y)))
+  I(I(x)) = M(I(I(M(x, y_1))), I(y_1))
+  M(y, M(I(y), I(x_1))) = I(x_1)
+  I(z) = M(I(M(I(x), z)), I(x))
+  M(M(x_1, y), M(M(I(y), I(x_1)), z)) = z
+  I(E) = M(I(I(x)), I(x))
+  M(M(x_1, y), M(I(y), I(x_1))) = E
+  I(M(I(y), I(x_1))) = M(x_1, y)
+  I(x) = M(I(E), I(x))
+  I(z) = M(I(M(x, z)), I(I(x)))
+  M(M(I(y), I(x_1)), M(M(x_1, y), z)) = z
+  I(M(x, M(y_1, z))) = M(I(z), I(M(x, y_1)))
+  I(E) = M(I(x), I(I(x)))
+  M(M(I(y), I(x_1)), M(x_1, y)) = E
+  I(x) = M(I(x), I(E)) }
+============== Complete 15 ==============
+{ I(M(x, y)) -> M(I(y), I(x))
+  M(x, M(I(x), z)) -> z
+  M(x, I(x)) -> E
+  I(I(x)) -> x
+  I(E) -> E
+  M(x, E) -> x
+  M(I(x), M(x, z)) -> z
+  M(M(x, y), z) -> M(x, M(y, z))
+  M(I(x), x) -> E
+  M(E, x) -> x }

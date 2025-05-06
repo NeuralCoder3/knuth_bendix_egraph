@@ -3,9 +3,10 @@ mod term_rewrite;
 mod types;
 mod util;
 
-use std::collections::HashSet;
-use std::collections::HashMap;
 use bimap::BiMap;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::time::Instant;
 use term_rewrite::parseeqs;
 
 use crate::kbo::*;
@@ -159,12 +160,169 @@ fn ground_instances(
 /*
     rewrites the kbe graph with a grounded rule
 */
-fn rewriteRule(
+fn rewriteRule(rule: &Rule) {}
 
-    rule: &Rule,
-) {
-
+fn instantiations(vars: &Vec<VarSym>, t: &HashSet<Term>) -> Vec<SubstitutionSet> {
+    if vars.is_empty() {
+        return vec![vec![]];
+    }
+    let mut result = vec![];
+    let var = &vars[0];
+    for t_prime in t.iter() {
+        let mut insts = instantiations(&vars[1..].to_vec(), t);
+        for inst in insts.iter_mut() {
+            inst.push((var.clone(), t_prime.clone()));
+        }
+        result.extend(insts);
+    }
+    result
 }
+
+fn match_rule(kbe: &KBEGraph, left: &Term, node: &ENode) -> bool {
+    match left {
+        Term::Variable(_) => panic!("Rule should be grounded"),
+        Term::Function(f, ts) => {
+            f == &node.label
+                && ts.len() == node.children.len()
+                && ts.iter().zip(node.children.iter()).all(|(t, id)| {
+                    let child = kbe.C.get_by_left(id).unwrap();
+                    match_rule(kbe, t, child)
+                })
+        }
+    }
+}
+
+// fn match_rule(
+//     kbe: &mut KBEGraph,
+//     rules: &RuleSet, // grounded rules
+//     node: &ENode
+// ) -> Option<RuleSet> {
+//     let applicable = rules.iter()
+//         .filter(|(l, _)| {
+//             match l {
+//                 Term::Variable(_) => panic!("Rule should be grounded"),
+//                 Term::Function(f, ts) => f == &node.label &&
+//                     ts.len() == node.children.len() &&
+//                     ts.iter().zip(node.children.iter()).all(|(t, id)| {
+//                         let child = kbe.C.get_by_left(id).unwrap();
+//                         apply_rules_here(kbe, rules, node)
+//                     })
+//             }
+//         });
+//     false
+// }
+
+fn apply_rules(
+    kbe: &mut KBEGraph,
+    rules: &RuleSet, // grounded rules
+) -> RuleSet {
+    let mut applied = vec![];
+    for (id, node) in kbe.C.iter() {
+        let applicable = rules.iter()
+            .filter(|(l, _)| {
+                match_rule(kbe, l, node)
+            });
+        applied.extend(
+            // TODO: double map not necessary
+            applicable.map(|rule| {
+                // TODO: clone not necessary
+                (id.clone(), rule)
+            })
+        );
+    }
+
+    // replace id by (embedded) right term
+    for (i, rule) in applied.iter() {
+        let (l, r) = rule;
+        let r_id = insert_term(r, kbe);
+        let node = kbe.C.get_by_left(&r_id).unwrap().clone(); // TODO: clone necessary as owner is bound to kbe
+        // unassociate r_id
+        kbe.C.remove_by_left(&r_id);
+        kbe.C.insert(i.clone(), node.clone());
+    }
+
+    // let old_nodes = kbe.C.right_values().cloned().collect::<Vec<_>>();
+    // for node in old_nodes.iter() {
+    //     let applicable = rules.iter()
+    //         .filter(|(left, _)| {
+    //             match_rule(kbe, left, node)
+    //         });
+    //     for rule in applicable {
+    //         let (l, r) = rule;
+    //         let r_id = insert_term(r, kbe);
+    //     }
+    // }
+    return applied.into_iter().map(|(_, rule)| {
+        rule.clone() // TODO: clone not necessary
+    }).collect::<Vec<_>>();
+}
+
+fn simplify_dag(kbe: &mut KBEGraph, ground_instances: &HashSet<Term>) -> RuleSet {
+    let mut new_rules = vec![];
+    let lr_eqs = kbe
+        .E
+        .iter()
+        .map(|(l, r)| (l.clone(), r.clone()))
+        .collect::<Vec<_>>();
+    let rl_eqs = kbe
+        .E
+        .iter()
+        .map(|(l, r)| (r.clone(), l.clone()))
+        .collect::<Vec<_>>();
+    let rules = kbe
+        .R
+        .iter()
+        .chain(lr_eqs.iter())
+        .chain(rl_eqs.iter())
+        .collect::<Vec<_>>();
+    // let mut i = 0;
+    for rule in rules.iter() {
+        // println!("Rule {}: {:?}", i, rule);
+        // i += 1;
+        let (l, r) = rule;
+        let vars = vars(l)
+            .iter()
+            .chain(vars(r).iter()) // e.g. in equation fst(x,y) = x
+            .cloned()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        // println!("  Vars: {:?}", vars);
+        let insts = instantiations(&vars, ground_instances);
+        // println!("  Instantiations: {:?}", insts);
+        for inst in insts.iter() {
+            // println!("    Instantiation: {:?}", inst);
+            let l_inst = subst(inst, l);
+            let r_inst = subst(inst, r);
+            // println!("      Instantiated: {:?} = {:?}", l_inst, r_inst);
+            let rule_inst = (l_inst, r_inst);
+            new_rules.push(rule_inst.clone());
+            // let changed = simplify_dag_with_rule(dag, &rule_inst);
+            // if changed {
+            //     output.push(rule_inst);
+            // }
+        }
+    }
+    // return new_rules
+    // only add the applicable ones
+    // return vec![];
+    return apply_rules(kbe, &new_rules);
+    // return new_rules.iter().flat_map(|rule| {
+    //     apply_rules(kbe, rules)
+    // }).collect::<Vec<_>>();
+}
+
+
+// { I(M(x, y)) -> M(I(y), I(x))
+//   M(x, M(I(x), z)) -> z
+//   M(x, I(x)) -> E
+//   I(I(x)) -> x
+//   I(E) -> E
+//   M(x, E) -> x
+//   M(I(x), M(x, z)) -> z
+//   M(M(x, y), z) -> M(x, M(y, z))
+//   M(I(x), x) -> E
+//   M(E, x) -> x }
 
 fn main() {
     let mut kbe = KBEGraph {
@@ -186,7 +344,7 @@ fn main() {
 
     // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
     let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
-    let t_id = insert_term(&t, &mut kbe);
+    let _t_id = insert_term(&t, &mut kbe);
 
     // Step 2
     kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
@@ -211,11 +369,11 @@ fn main() {
 
         // Step 3.1 (E-Graph: Apply rules on graph)
         // TODO: without 3.2 this would not resolve as equations are oriented
-        // we would just eagerly rewrite the graph? 
+        // we would just eagerly rewrite the graph?
         // let ground_instances = ground_instances(&kbe);
         let mut instances: HashSet<Term> = HashSet::new();
-        let mut visited : HashMap<ENode, Term> = HashMap::new();
-        for (_,enode) in kbe.C.iter() {
+        let mut visited: HashMap<ENode, Term> = HashMap::new();
+        for (_, enode) in kbe.C.iter() {
             let _ = ground_instances(&mut visited, &mut instances, enode, &kbe);
         }
         println!("Number of ground instances: {}", instances.len());
@@ -224,9 +382,10 @@ fn main() {
         }
 
         // // rules + ->eq + <-eq
-        kbe.R.extend(simplify_dag(&mut kbe, &rules, &ground_instances));
-        // rules.extend(simplify_dag(&mut dag, &eqs.iter().map(|(l, r)| (l.clone(), r.clone())).collect(), &ground_instances));
-        // rules.extend(simplify_dag(&mut dag, &eqs.iter().map(|(l, r)| (r.clone(), l.clone())).collect(), &ground_instances));
+        let new_rules = simplify_dag(&mut kbe, &instances);
+        println!("New rules:");
+        printrules(&new_rules);
+        kbe.R.extend(new_rules);
 
         // Step 3.2 (KBO: Add critical pairs)
         let mut cps = vec![];
