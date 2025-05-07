@@ -133,6 +133,19 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
     }
 }
 
+fn extract_term(
+    kbe: &KBEGraph,
+    id: Id,
+) -> Term {
+    let node = kbe.C.get_by_left(&id).unwrap();
+    let mut children = vec![];
+    for child in node.children.iter() {
+        let child_term = extract_term(kbe, *child);
+        children.push(child_term);
+    }
+    Term::Function(node.label.clone(), children)
+}
+
 /*
     with C, recursively extracts all ground terms from the graph
 */
@@ -343,8 +356,9 @@ fn main() {
     // Step 1
 
     // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
-    let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
-    let _t_id = insert_term(&t, &mut kbe);
+    // let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
+    let t = parseterm("M(I(x), M(x, z))"); // -> z
+    let t_id = insert_term(&t, &mut kbe);
 
     // Step 2
     kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
@@ -369,7 +383,7 @@ fn main() {
 
         // Step 3.1 (E-Graph: Apply rules on graph)
         // TODO: without 3.2 this would not resolve as equations are oriented
-        // we would just eagerly rewrite the graph?
+        // we would just eagerly rewrite the graph? (adding rules to R help? or that we keep the subexpressions?)
         // let ground_instances = ground_instances(&kbe);
         let mut instances: HashSet<Term> = HashSet::new();
         let mut visited: HashMap<ENode, Term> = HashMap::new();
@@ -410,6 +424,9 @@ fn main() {
         println!("Result:");
         let t_prime = linorm(&kbe.R, &t);
         println!("{}", strterm(&t_prime));
+        let t_extract = extract_term(&kbe, t_id);
+        println!("Extracted term:");
+        println!("{}", strterm(&t_extract));
     }
 
     // match using R and E (ground instances)

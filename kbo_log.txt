@@ -10,6 +10,15 @@ and  r0 (under subst)
 
 
 
+M(I(M(b,M(a, M(I(a), I(b))))),c)
+
+
+
+
+M(M(I(x_1),x_1), z)
+via M(M(x, y), z) = M(x, M(y, z)) => M(I(x_1), M(x_1, z))
+via M(I(x), x) = E => M(E, z)
+
 
 ================ Input ==================
 { M(M(x, y), z) = M(x, M(y, z))
