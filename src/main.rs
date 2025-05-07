@@ -345,7 +345,7 @@ fn main() {
         R: vec![],
     };
 
-    // Step 0
+    // Step 0 (define precedence)
     let pre: Precedence = vec![
         (String::from("I"), 3),
         (String::from("M"), 1),
@@ -353,14 +353,14 @@ fn main() {
     ];
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
-    // Step 1
+    // Step 1 (build KBE graph)
 
     // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
     // let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
     let t = parseterm("M(I(x), M(x, z))"); // -> z
     let t_id = insert_term(&t, &mut kbe);
 
-    // Step 2
+    // Step 2 (orient rules in initial KBO step)
     kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
     kbe.R = vec![];
     let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
