@@ -6,6 +6,8 @@ mod util;
 use bimap::BiMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::io;
+use std::process::exit;
 use std::time::Instant;
 use term_rewrite::parseeqs;
 
@@ -22,11 +24,19 @@ where
 
     let copy = state.clone();
     if let Ok(oriented) = orient_equation(lpo, copy) {
+        // println!("Oriented:");
+        // printrule(&oriented.0);
         let composed = compose(oriented);
+        // println!("Compose");
         let collapsed = collapse(composed);
+        // println!("Collapse");
         let added = add_rule(collapsed);
+        // println!("Add");
         let simplified = simplify(added);
+        // println!("Simplify");
+        // let simplified = added;
         let removed = remove_trivial(verbose, simplified);
+        // println!("Remove trivial");
         removed
     } else {
         let copy = state.clone();
@@ -43,6 +53,7 @@ where
     let mut changed = true;
     let mut new_state = state;
     while changed {
+        // println!("Knuth loop");
         changed = false;
         // let (rules, eqs) = new_state;
         let new_state_prime = knuth_steps(verbose, lpo, &new_state);
@@ -363,9 +374,9 @@ fn main() {
     // Step 2 (orient rules in initial KBO step)
     kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
     kbe.R = vec![];
-    let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
-    kbe.R = state.0;
-    kbe.E = state.1;
+    // let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
+    // kbe.R = state.0;
+    // kbe.E = state.1;
 
     let t_prime = linorm(&kbe.R, &t);
     println!("Rules:");
@@ -399,7 +410,8 @@ fn main() {
         let new_rules = simplify_dag(&mut kbe, &instances);
         println!("New rules:");
         printrules(&new_rules);
-        kbe.R.extend(new_rules);
+        // kbe.R.extend(new_rules);
+        kbe.E.extend(new_rules);
 
         // Step 3.2 (KBO: Add critical pairs)
         let mut cps = vec![];
@@ -409,6 +421,7 @@ fn main() {
                 cps.extend(cp);
             }
         }
+        println!("Computed {} critical pairs", cps.len());
         // TODO: only add some critical pairs (ematch or grounded (how many from R are subsumed))
         // kbe.E.extend(cps);
         let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
@@ -420,10 +433,12 @@ fn main() {
         printrules(&kbe.R);
         println!("Equations:");
         printeqs(&kbe.E);
+        
 
         println!("Result:");
         let t_prime = linorm(&kbe.R, &t);
         println!("{}", strterm(&t_prime));
+        // exit(0);
         let t_extract = extract_term(&kbe, t_id);
         println!("Extracted term:");
         println!("{}", strterm(&t_extract));
