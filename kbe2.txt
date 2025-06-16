@@ -78,6 +78,22 @@ Notes:
 - Note: As R might not be confluent, we need to choose a deterministic system by which we normalize using R.
 
 
+b
+
+M(E,b) = b
+
+M(E,b) -> b in R
+M(F,b) -> b in R
+
+b
+M(E,b) = b
+
+
+M(F,x) = x
+
+
+M(F,M(E,b)) -> b
+
 
 
 

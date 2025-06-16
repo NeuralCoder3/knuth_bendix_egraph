@@ -106,7 +106,7 @@ struct KBEGraph {
 */
 fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
     match t {
-        Term::Variable(var) => {
+        Term::Variable(var) => { // TODO: panic? term should be grounded
             // variable becomes a leaf (recursive calls will handle parents)
             let node = ENode {
                 label: var.0.clone(),
@@ -123,6 +123,7 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
             return id;
         }
         Term::Function(f, ts) => {
+            // TODO: normalize here or is input always normalized?
             // embed all children, then create a new node (keep track of parent)
             let mut children = vec![];
             for t_prime in ts {
@@ -368,15 +369,15 @@ fn main() {
 
     // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
     // let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
-    let t = parseterm("M(I(x), M(x, z))"); // -> z
+    let t = parseterm("M(I(a), M(a, b))"); // -> z
     let t_id = insert_term(&t, &mut kbe);
 
     // Step 2 (orient rules in initial KBO step)
     kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
     kbe.R = vec![];
-    // let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
-    // kbe.R = state.0;
-    // kbe.E = state.1;
+    let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
+    kbe.R = state.0;
+    kbe.E = state.1;
 
     let t_prime = linorm(&kbe.R, &t);
     println!("Rules:");
@@ -399,12 +400,18 @@ fn main() {
         let mut instances: HashSet<Term> = HashSet::new();
         let mut visited: HashMap<ENode, Term> = HashMap::new();
         for (_, enode) in kbe.C.iter() {
+            // b
             let _ = ground_instances(&mut visited, &mut instances, enode, &kbe);
         }
         println!("Number of ground instances: {}", instances.len());
         for t in instances.iter() {
             println!("  {}", strterm(t));
         }
+        // TODO: also at rewrite order
+        // add all instances to E, knuth bendix (orient, simpl)
+        // or only if left/right in C
+
+        // is from E already onriented/grounded is oriented
 
         // // rules + ->eq + <-eq
         let new_rules = simplify_dag(&mut kbe, &instances);
@@ -424,6 +431,9 @@ fn main() {
         println!("Computed {} critical pairs", cps.len());
         // TODO: only add some critical pairs (ematch or grounded (how many from R are subsumed))
         // kbe.E.extend(cps);
+        // simp via R, match on C
+
+        // kbo faster because only considers relevant critical pairs
         let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
         kbe.R = state.0;
         kbe.E = state.1;
