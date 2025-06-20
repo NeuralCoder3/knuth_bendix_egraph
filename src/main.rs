@@ -294,8 +294,12 @@ fn apply_rules(
         );
     }
 
+    // TODO: assert no two rules match simultaneously?
+    // well that can happen => handle it
+
     // replace id by (embedded) right term
     for (i, rule) in applied.iter() {
+        // TODO: this is probably wrong!
         let (l, r) = rule;
         let r_id = insert_term(r, kbe);
         let node = kbe.C.get_by_left(&r_id).unwrap().clone(); // TODO: clone necessary as owner is bound to kbe
