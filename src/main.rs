@@ -132,6 +132,12 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
                 let child = insert_term(t_prime, kbe);
                 children.push(child);
             }
+            // DEBUG: all children exist
+            // for child in children.iter() {
+            //     if !kbe.C.contains_left(child) {
+            //         panic!("Child id {} not found in C", child);
+            //     }
+            // }
             let node = ENode {
                 label: f.clone(),
                 children,
@@ -217,7 +223,12 @@ fn match_rule(kbe: &KBEGraph, left: &Term, node: &ENode) -> bool {
 }
 
 
-fn match_rule_var(kbe: &KBEGraph, left: &Term, node: &ENode, subst: &mut Vec<(VarSym, ENode)>) -> bool {
+fn match_rule_var(kbe: &KBEGraph, left: &Term, node_id: Id) -> bool {
+    match_rule_var_subst(kbe, left, node_id, &mut vec![])
+}
+
+
+fn match_rule_var_subst(kbe: &KBEGraph, left: &Term, node_id: Id, subst: &mut Vec<(VarSym, Id)>) -> bool {
     // we know node is grounded
     // left might contain vars => if so, accociate them with the term at node if not in substset
     // if in substset, check if the term at node matches the substitution
@@ -227,20 +238,20 @@ fn match_rule_var(kbe: &KBEGraph, left: &Term, node: &ENode, subst: &mut Vec<(Va
     // TODO: operate on enode id
     match left {
         Term::Variable(x) => 
-            if subst.iter().any(|(v, _)| v == x) {
-                // already in subst, check if it matches
-                subst.iter().any(|(v, n)| v == x && n.label == node.label && n.children == node.children)
+            if let Some((_, subst_id)) = subst.iter().find(|(var, _)| var == x) {
+                // in subst, check if node matches
+                *subst_id == node_id
             } else {
                 // not in subst, add it
-                subst.push((x.clone(), node.clone()));
+                subst.push((x.clone(), node_id));
                 true
             },
         Term::Function(f, ts) => {
+            let node = kbe.C.get_by_left(&node_id).unwrap();
             f == &node.label
                 && ts.len() == node.children.len()
                 && ts.iter().zip(node.children.iter()).all(|(t, id)| {
-                    let child = kbe.C.get_by_left(id).unwrap();
-                    match_rule(kbe, t, child)
+                    match_rule_var_subst(kbe, t, *id, subst)
                 })
         }
     }
@@ -290,7 +301,7 @@ fn apply_rules(
         let node = kbe.C.get_by_left(&r_id).unwrap().clone(); // TODO: clone necessary as owner is bound to kbe
                                                               // unassociate r_id
         kbe.C.remove_by_left(&r_id);
-        kbe.C.insert(i.clone(), node.clone());
+        kbe.C.insert_no_overwrite(i.clone(), node.clone());
     }
 
     // both sides => check if right sides matches then add rules to applied
@@ -559,7 +570,20 @@ fn main() {
         for rule1 in kbe.R.iter() {
             for rule2 in kbe.R.iter() {
                 let cp = critical_pair(rule1, rule2);
-                cps.extend(cp);
+                // simplify using R
+                let simpl_cp = 
+                    cp.into_iter()
+                    .map(|(l, r)| {
+                        let l_prime = linorm(&kbe.R, &l);
+                        let r_prime = linorm(&kbe.R, &r);
+                        (l_prime, r_prime)
+                    })
+                    .filter(|(l, r)| {
+                        // only keep if not trivial
+                        l != r && !kbe.E.contains(&(l.clone(), r.clone()))
+                    })
+                    .collect::<Vec<_>>();
+                cps.extend(simpl_cp);
             }
         }
         println!("Computed {} critical pairs", cps.len());
@@ -573,11 +597,11 @@ fn main() {
         .map(|cp| {
             let (l, r) = cp;
             let mut count = 0;
-            for (_, node) in kbe.C.iter() {
+            for (id, _) in kbe.C.iter() {
                 // TODO: need to match ground instance
-                // if match_rule_varl(&kbe, l, node) || match_rule_var(&kbe, r, node) {
-                //     count += 1;
-                // }
+                if match_rule_var(&kbe, l, *id) || match_rule_var(&kbe, r, *id) {
+                    count += 1;
+                }
             }
             (cp, count)
         })
@@ -586,14 +610,18 @@ fn main() {
         // sort by count descending
         counted_cps.sort_by_key(|(_, count)| -count.clone());
         // take top 5 to extend E
+        let top_cps = counted_cps.into_iter().take(5).map(|(cp, _)| cp.clone()).collect::<Vec<_>>();
+        println!("Top 5 critical pairs:");
+        for (l, r) in top_cps.iter() {
+            println!("  {} -> {}", strterm(l), strterm(r));
+        }
         // TODO: not clone
         kbe.E.extend(
-            counted_cps
-                .iter()
-                .take(5)
-                .map(|((l,r), _)| (l.clone(), r.clone()))
-                .collect::<Vec<_>>(),
+            top_cps
         );
+
+
+
         // counted_cps.iter().take(5).for_each(|(cp, _)| {
         //     let (l, r) = cp;
         //     kbe.E.push((l.clone(), r.clone()));
