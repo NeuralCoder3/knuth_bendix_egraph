@@ -216,6 +216,36 @@ fn match_rule(kbe: &KBEGraph, left: &Term, node: &ENode) -> bool {
     }
 }
 
+
+fn match_rule_var(kbe: &KBEGraph, left: &Term, node: &ENode, subst: &mut Vec<(VarSym, ENode)>) -> bool {
+    // we know node is grounded
+    // left might contain vars => if so, accociate them with the term at node if not in substset
+    // if in substset, check if the term at node matches the substitution
+
+    // instead of term at enode, we can use the enode directly
+    // we know enodes are hashed => comparison on enode becomes identity check
+    // TODO: operate on enode id
+    match left {
+        Term::Variable(x) => 
+            if subst.iter().any(|(v, _)| v == x) {
+                // already in subst, check if it matches
+                subst.iter().any(|(v, n)| v == x && n.label == node.label && n.children == node.children)
+            } else {
+                // not in subst, add it
+                subst.push((x.clone(), node.clone()));
+                true
+            },
+        Term::Function(f, ts) => {
+            f == &node.label
+                && ts.len() == node.children.len()
+                && ts.iter().zip(node.children.iter()).all(|(t, id)| {
+                    let child = kbe.C.get_by_left(id).unwrap();
+                    match_rule(kbe, t, child)
+                })
+        }
+    }
+}
+
 // fn match_rule(
 //     kbe: &mut KBEGraph,
 //     rules: &RuleSet, // grounded rules
@@ -545,9 +575,9 @@ fn main() {
             let mut count = 0;
             for (_, node) in kbe.C.iter() {
                 // TODO: need to match ground instance
-                if match_rule(&kbe, l, node) || match_rule(&kbe, r, node) {
-                    count += 1;
-                }
+                // if match_rule_varl(&kbe, l, node) || match_rule_var(&kbe, r, node) {
+                //     count += 1;
+                // }
             }
             (cp, count)
         })
