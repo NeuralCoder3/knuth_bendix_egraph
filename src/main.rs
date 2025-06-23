@@ -99,6 +99,8 @@ struct KBEGraph {
     id_count: usize,
     E: EquationSet,
     R: RuleSet,
+    // replacement_set: old_id -> new_id (old_id no longer exists in C)
+    S: HashMap<Id, Id>, // used to keep track of replacements
 }
 
 /*
@@ -154,7 +156,12 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
 }
 
 fn extract_term(kbe: &KBEGraph, id: Id) -> Term {
-    let node = kbe.C.get_by_left(&id).unwrap();
+    let real_id = if let Some(real_id) = kbe.S.get(&id) {
+        *real_id
+    } else {
+        id
+    };
+    let node = kbe.C.get_by_left(&real_id).unwrap();
     let mut children = vec![];
     for child in node.children.iter() {
         let child_term = extract_term(kbe, *child);
@@ -177,7 +184,12 @@ fn ground_instances(
     }
     let mut children = vec![];
     for child in node.children.iter() {
-        let child_node = kbe.C.get_by_left(child).unwrap();
+        let child = if let Some(real_id) = kbe.S.get(child) {
+            *real_id
+        } else {
+            *child
+        };
+        let child_node = kbe.C.get_by_left(&child).unwrap();
         let child_node = ground_instances(visited, instances, child_node, kbe);
         children.push(child_node.clone());
     }
@@ -215,7 +227,12 @@ fn match_rule(kbe: &KBEGraph, left: &Term, node: &ENode) -> bool {
             f == &node.label
                 && ts.len() == node.children.len()
                 && ts.iter().zip(node.children.iter()).all(|(t, id)| {
-                    let child = kbe.C.get_by_left(id).unwrap();
+                    let id = if let Some(real_id) = kbe.S.get(id) {
+                        *real_id
+                    } else {
+                        *id
+                    };
+                    let child = kbe.C.get_by_left(&id).unwrap();
                     match_rule(kbe, t, child)
                 })
         }
@@ -247,7 +264,12 @@ fn match_rule_var_subst(kbe: &KBEGraph, left: &Term, node_id: Id, subst: &mut Ve
                 true
             },
         Term::Function(f, ts) => {
-            let node = kbe.C.get_by_left(&node_id).unwrap();
+            let subst_id = if let Some(subst_id) = kbe.S.get(&node_id) {
+                *subst_id
+            } else {
+                node_id
+            };
+            let node = kbe.C.get_by_left(&subst_id).unwrap();
             f == &node.label
                 && ts.len() == node.children.len()
                 && ts.iter().zip(node.children.iter()).all(|(t, id)| {
@@ -307,30 +329,53 @@ fn apply_rules(
         let (l, r) = rule;
         // TODO: r_id might already exist => do not first create but only construct term
         let r_id = insert_term(r, kbe);
-        let node = kbe.C.get_by_left(&r_id).unwrap().clone(); // TODO: clone necessary as owner is bound to kbe
-                                                              // unassociate r_id
-        kbe.C.remove_by_left(&r_id);
         kbe.C.remove_by_left(i);
-        let result = kbe.C.insert_no_overwrite(*i,node.clone());
-        if result.is_err() {
-            panic!("Node with id {} already exists in C", i);
-        }
-        println!("  Inserted new node with id {} replacing {}", r_id, i);
-        assert!(kbe.C.contains_left(i), "Node with id {} not found in C", i);
-        println!("  Id {} now contains term: {}", i, strterm(&extract_term(kbe, *i)));
-        assert!(kbe.C.contains_left(&i.clone()), "Node with id {} not found in C", i);
-        assert!(!kbe.C.contains_left(&r_id), "Node with id {} still exists in C", r_id);
+        kbe.S.insert(*i, r_id); // keep track of replacement
+
+        // replace all children of i with r_id
+        // for node_id in kbe.C.left_values().cloned().collect::<Vec<_>>() {
+        //     let node = kbe.C.get_by_left(&node_id).unwrap();
+        //     if node.children.contains(i) {
+        //         let new_children: Vec<Id> = node.children.iter().map(|child_id| {
+        //             if child_id == i {
+        //                 r_id // replace i with r_id
+        //             } else {
+        //                 *child_id // keep other children
+        //             }
+        //         }).collect();
+        //         let new_node = ENode {
+        //             label: node.label.clone(),
+        //             children: new_children,
+        //         };
+        //         // replace node in C with new_node
+        //         kbe.C.insert(node_id, new_node);
+        //     }
+        // }
+
+        // let node = kbe.C.get_by_left(&r_id).unwrap().clone(); // TODO: clone necessary as owner is bound to kbe
+        //                                                       // unassociate r_id
+        // kbe.C.remove_by_left(&r_id);
+        // kbe.C.remove_by_left(i);
+        // let result = kbe.C.insert_no_overwrite(*i,node.clone());
+        // if result.is_err() {
+        //     panic!("Node with id {} already exists in C", i);
+        // }
+        // println!("  Inserted new node with id {} replacing {}", r_id, i);
+        // assert!(kbe.C.contains_left(i), "Node with id {} not found in C", i);
+        // println!("  Id {} now contains term: {}", i, strterm(&extract_term(kbe, *i)));
+        // assert!(kbe.C.contains_left(&i.clone()), "Node with id {} not found in C", i);
+        // assert!(!kbe.C.contains_left(&r_id), "Node with id {} still exists in C", r_id);
     }
 
-    // validate the egraph
-    for (id, node) in kbe.C.iter() {
-        // check if all children are in C
-        for child_id in node.children.iter() {
-            if !kbe.C.contains_left(child_id) {
-                panic!("Child id {} not found in C for node {}", child_id, id);
-            }
-        }
-    }
+    // // validate the egraph
+    // for (id, node) in kbe.C.iter() {
+    //     // check if all children are in C
+    //     for child_id in node.children.iter() {
+    //         if !kbe.C.contains_left(child_id) {
+    //             panic!("Child id {} not found in C for node {}", child_id, id);
+    //         }
+    //     }
+    // }
 
     // both sides => check if right sides matches then add rules to applied
     if both_sides {
@@ -516,6 +561,7 @@ fn main() {
         id_count: 0,
         E: vec![],
         R: vec![],
+        S: HashMap::new(),
     };
 
     // Step 0 (define precedence)
