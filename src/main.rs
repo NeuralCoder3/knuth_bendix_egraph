@@ -297,15 +297,39 @@ fn apply_rules(
     // TODO: assert no two rules match simultaneously?
     // well that can happen => handle it
 
+
     // replace id by (embedded) right term
     for (i, rule) in applied.iter() {
-        // TODO: this is probably wrong!
+        // we insert the term resulting in id r_id
+        // then we need to replace the old node
+        // remove new r_id node, i node and write to i
+        println!("  Replace node {} with new term {} (previously {} = {})", i, strterm(&rule.1), strterm(&rule.0), strterm(&extract_term(kbe, *i)));
         let (l, r) = rule;
+        // TODO: r_id might already exist => do not first create but only construct term
         let r_id = insert_term(r, kbe);
         let node = kbe.C.get_by_left(&r_id).unwrap().clone(); // TODO: clone necessary as owner is bound to kbe
                                                               // unassociate r_id
         kbe.C.remove_by_left(&r_id);
-        kbe.C.insert_no_overwrite(i.clone(), node.clone());
+        kbe.C.remove_by_left(i);
+        let result = kbe.C.insert_no_overwrite(*i,node.clone());
+        if result.is_err() {
+            panic!("Node with id {} already exists in C", i);
+        }
+        println!("  Inserted new node with id {} replacing {}", r_id, i);
+        assert!(kbe.C.contains_left(i), "Node with id {} not found in C", i);
+        println!("  Id {} now contains term: {}", i, strterm(&extract_term(kbe, *i)));
+        assert!(kbe.C.contains_left(&i.clone()), "Node with id {} not found in C", i);
+        assert!(!kbe.C.contains_left(&r_id), "Node with id {} still exists in C", r_id);
+    }
+
+    // validate the egraph
+    for (id, node) in kbe.C.iter() {
+        // check if all children are in C
+        for child_id in node.children.iter() {
+            if !kbe.C.contains_left(child_id) {
+                panic!("Child id {} not found in C for node {}", child_id, id);
+            }
+        }
     }
 
     // both sides => check if right sides matches then add rules to applied
