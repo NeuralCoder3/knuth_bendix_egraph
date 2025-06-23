@@ -673,7 +673,18 @@ fn main() {
             let mut count = 0;
             for (id, _) in kbe.C.iter() {
                 // TODO: need to match ground instance
-                if match_rule_var(&kbe, l, *id) || match_rule_var(&kbe, r, *id) {
+                // TODO: we do not want to match on variable only right side
+                let is_var_l = match l {
+                    Term::Variable(_) => true, // do not match on variable
+                    Term::Function(_, _) => false,
+                };
+                let is_var_r = match r {
+                    Term::Variable(_) => true, // do not match on variable
+                    Term::Function(_, _) => false,
+                };
+                let match_left = match_rule_var(&kbe, &l, *id);
+                let match_right = match_rule_var(&kbe, &r, *id);
+                if (!is_var_l && match_left) || (!is_var_r && match_right) {
                     count += 1;
                 }
             }
