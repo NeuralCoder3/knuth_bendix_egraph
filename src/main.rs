@@ -156,12 +156,7 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
 }
 
 fn extract_term(kbe: &KBEGraph, id: Id) -> Term {
-    let real_id = if let Some(real_id) = kbe.S.get(&id) {
-        *real_id
-    } else {
-        id
-    };
-    let node = kbe.C.get_by_left(&real_id).unwrap();
+    let node = kbe.C.get_by_left(&resolve_id(kbe, id)).unwrap();
     let mut children = vec![];
     for child in node.children.iter() {
         let child_term = extract_term(kbe, *child);
@@ -184,12 +179,7 @@ fn ground_instances(
     }
     let mut children = vec![];
     for child in node.children.iter() {
-        let child = if let Some(real_id) = kbe.S.get(child) {
-            *real_id
-        } else {
-            *child
-        };
-        let child_node = kbe.C.get_by_left(&child).unwrap();
+        let child_node = kbe.C.get_by_left(&resolve_id(kbe, *child)).unwrap();
         let child_node = ground_instances(visited, instances, child_node, kbe);
         children.push(child_node.clone());
     }
@@ -227,12 +217,7 @@ fn match_rule(kbe: &KBEGraph, left: &Term, node: &ENode) -> bool {
             f == &node.label
                 && ts.len() == node.children.len()
                 && ts.iter().zip(node.children.iter()).all(|(t, id)| {
-                    let id = if let Some(real_id) = kbe.S.get(id) {
-                        *real_id
-                    } else {
-                        *id
-                    };
-                    let child = kbe.C.get_by_left(&id).unwrap();
+                    let child = kbe.C.get_by_left(&resolve_id(kbe, *id)).unwrap();
                     match_rule(kbe, t, child)
                 })
         }
@@ -264,12 +249,7 @@ fn match_rule_var_subst(kbe: &KBEGraph, left: &Term, node_id: Id, subst: &mut Ve
                 true
             },
         Term::Function(f, ts) => {
-            let subst_id = if let Some(subst_id) = kbe.S.get(&node_id) {
-                *subst_id
-            } else {
-                node_id
-            };
-            let node = kbe.C.get_by_left(&subst_id).unwrap();
+            let node = kbe.C.get_by_left(&resolve_id(kbe, node_id)).unwrap();
             f == &node.label
                 && ts.len() == node.children.len()
                 && ts.iter().zip(node.children.iter()).all(|(t, id)| {
@@ -330,6 +310,7 @@ fn apply_rules(
         // TODO: r_id might already exist => do not first create but only construct term
         let r_id = insert_term(r, kbe);
         kbe.C.remove_by_left(i);
+        assert!(!kbe.S.contains_key(i), "Node with id {} already replaced", i);
         kbe.S.insert(*i, r_id); // keep track of replacement
 
         // replace all children of i with r_id
@@ -554,6 +535,20 @@ where
 //   M(M(x, y), z) -> M(x, M(y, z))
 //   M(I(x), x) -> E
 //   M(E, x) -> x }
+
+
+fn resolve_id(kbe: &KBEGraph, id: Id) -> Id {
+    let mut id = id;
+    while let Some(real_id) = kbe.S.get(&id) {
+        id = *real_id;
+    }
+    id
+    // if let Some(real_id) = kbe.S.get(&id) {
+    //     return *real_id;
+    // }
+    // id
+}
+
 
 fn main() {
     let mut kbe = KBEGraph {
