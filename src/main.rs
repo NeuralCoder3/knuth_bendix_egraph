@@ -550,6 +550,39 @@ fn resolve_id(kbe: &KBEGraph, id: Id) -> Id {
 }
 
 
+// fn count_symbols(t: &Term) -> HashMap<String, usize> {
+//     let mut counts = HashMap::new();
+//     match t {
+//         Term::Variable(var) => {
+//             *counts.entry(var.0.clone()).or_insert(0) += 1;
+//         }
+//         Term::Function(f, ts) => {
+//             *counts.entry(f.clone()).or_insert(0) += 1;
+//             for t_prime in ts {
+//                 let child_counts = count_symbols(t_prime);
+//                 for (k, v) in child_counts.iter() {
+//                     *counts.entry(k.clone()).or_insert(0) += v;
+//                 }
+//             }
+//         }
+//     }
+//     counts
+// }
+fn count_symbols(t: &Term, map: &mut HashMap<String, usize>) {
+    match t {
+        Term::Variable(var) => {
+            *map.entry(var.0.clone()).or_insert(0) += 1;
+        }
+        Term::Function(f, ts) => {
+            *map.entry(f.clone()).or_insert(0) += 1;
+            for t_prime in ts {
+                count_symbols(t_prime, map);
+            }
+        }
+    }
+}
+
+
 fn main() {
     let mut kbe = KBEGraph {
         C: BiMap::new(),
@@ -559,26 +592,135 @@ fn main() {
         S: HashMap::new(),
     };
 
+    // // Step 0 (define precedence)
+    // let pre: Precedence = vec![
+    //     (String::from("I"), 3),
+    //     (String::from("M"), 1),
+    //     (String::from("E"), 2),
+    //     (String::from("A"), 0), // e.g. for test term
+    //     (String::from("B"), 0), // e.g. for test term
+    // ];
+    // let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
+
+    // // Step 1 (build KBE graph)
+
+    // // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
+    // // let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
+    // // let t = parseterm("M(I(x), M(x, z))"); // -> z
+    // let t = parseterm("M(I(A), M(A, B))"); // -> B
+    // let t_id = insert_term(&t, &mut kbe);
+
+    // // Step 2 (orient rules in initial KBO step)
+    // kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
+
+
     // Step 0 (define precedence)
     let pre: Precedence = vec![
-        (String::from("I"), 3),
-        (String::from("M"), 1),
-        (String::from("E"), 2),
-        (String::from("A"), 0), // e.g. for test term
-        (String::from("B"), 0), // e.g. for test term
     ];
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
     // Step 1 (build KBE graph)
-
-    // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
-    // let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
-    // let t = parseterm("M(I(x), M(x, z))"); // -> z
-    let t = parseterm("M(I(A), M(A, B))"); // -> B
+    // \\ c b. (add (mul c b) (mul c (neg b)))
+    //  (app (app S (app (app B S) (app (app B (app B add)) mul))) (app (app R neg) (app (app B B) mul)))
+    let t = parseterm("App(App(S, App(App(B, S), App(App(B, App(B, Add)), Mul))), App(App(R, Neg), App(App(B, B), Mul)))"); // -> Add
     let t_id = insert_term(&t, &mut kbe);
 
     // Step 2 (orient rules in initial KBO step)
-    kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
+    kbe.E = parseeqs(
+        vec![
+"f=App(App(B,f),I)", // eta-expansion
+"App(App(App(B,x),y),z)=App(x,App(y,z))", // reduce-B
+"App(App(App(R,x),y),z)=App(App(y,z),x)", // reduce-R
+"App(App(App(S,x),y),z)=App(App(x,z),App(y,z))", // reduce-S
+"App(I,x)=x", // reduce-I
+"App(App(K,x),y)=x", // reduce-K
+"App(App(App(C,x),y),z)=App(App(x,z),y)", // reduce-C
+"App(x,App(y,z))=App(App(App(B,x),y),z)", // reduce-B-inv
+"App(App(y,z),x)=App(App(App(R,x),y),z)", // reduce-R-inv
+"App(App(x,z),App(y,z))=App(App(App(S,x),y),z)", // reduce-S-inv
+"App(App(x,z),y)=App(App(App(C,x),y),z)", // reduce-C-inv
+"App(App(B,S),K)=B", // char-B-1
+"App(S,App(K,x))=App(B,x)", // char-B-2
+"App(C,C)=R", // char-R-1
+"App(App(B,B),App(C,I))=R", // char-R-2
+"App(B,App(App(C,I),x))=App(R,x)", // char-R-3
+"App(B,I)=I", // char-I-1
+"App(App(S,K),x)=I", // char-I-2
+"App(C,App(K,I))=K", // char-K-1
+"App(App(C,App(App(B,B),S)),K)=C", // char-C-1
+"App(App(B,App(S,x)),K)=App(C,x)", // char-C-2
+"App(App(C,App(App(B,B),S)),K)=C", // char-C-3
+"App(App(S,x),App(K,y))=App(App(C,x),y)", // char-C-4
+"B=App(App(B,S),K)", // char-B-1-inv
+"App(B,x)=App(S,App(K,x))", // char-B-2-inv
+"R=App(C,C)", // char-R-1-inv
+"R=App(App(B,B),App(C,I))", // char-R-2-inv
+"App(R,x)=App(B,App(App(C,I),x))", // char-R-3-inv
+"I=App(B,I)", // char-I-1-inv
+"K=App(C,App(K,I))", // char-K-1-inv
+"C=App(App(C,App(App(B,B),S)),K)", // char-C-1-inv
+"App(C,x)=App(App(B,App(S,x)),K)", // char-C-2-inv
+"C=App(App(C,App(App(B,B),S)),K)", // char-C-3-inv
+"App(App(C,x),y)=App(App(S,x),App(K,y))", // char-C-4-inv
+"App(App(B,App(App(B,x),y)),z)=App(App(B,x),App(App(B,y),z))", // assoc-B-1
+"App(App(B,x),App(App(B,y),z))=App(App(B,App(App(B,x),y)),z)", // assoc-B-2
+
+
+// "App(App(map,f),nil)=nil", // map-nil (commented out)
+// "App(App(map,f),App(App(cons,x),xs))=App(App(cons,App(f,x)),App(App(map,f),xs))", // map-cons (commented out)
+// "App(isnil,nil)=true", // isnil-nil (commented out)
+// "App(isnil,App(App(cons,x),xs))=false", // isnil-cons (commented out)
+// "App(App(Add,f),0)=f", // Add-neutral-1 (commented out)
+"App(App(Add,0),f)=f", // Add-neutral-2
+"App(App(R,0),Add)=I", // Add-neutral-3
+"App(App(Add,f),App(neg,f))=0", // Add-inverse-1
+"App(App(Add,App(neg,f)),f)=0", // Add-inverse-2
+"App(App(S,Add),neg)=0", // Add-inverse-3
+"App(App(Add,App(App(Add,f),g)),h)=App(App(Add,f),App(App(Add,g),h))", // Add-comm-1
+"App(App(Add,f),App(App(Add,g),h))=App(App(Add,App(App(Add,f),g)),h)", // Add-comm-2
+"App(C,Add)=Add", // Add-comm-3
+"Add=App(C,Add)", // Add-comm-4
+"App(App(Add,App(App(Add,f),g)),h)=App(App(Add,f),App(App(Add,g),h))", // Add-assoc-1
+"App(App(Add,f),App(App(Add,g),h))=App(App(Add,App(App(Add,f),g)),h)", // Add-assoc-2
+"App(App(Add,App(App(mul,a),b)),App(App(mul,a),c))=App(App(mul,a),App(App(Add,b),c))", // distr-l-1
+"App(App(S,App(App(B,C),App(App(B,App(B,B)),App(App(B,App(B,Add)),mul)))),mul)=App(App(R,Add),App(App(B,B),App(App(B,B),mul)))", // distr-l-2
+"App(App(B,neg),neg)=I", // double-neg
+        ]
+
+    );
+
+
+    // compute precedence by occurence count often => higher
+    let mut symbol_counts = HashMap::new();
+    count_symbols(&t, &mut symbol_counts);
+    for eqs in kbe.E.iter() {
+        count_symbols(&eqs.0, &mut symbol_counts);
+        count_symbols(&eqs.1, &mut symbol_counts);
+    }
+    for rule in kbe.R.iter() {
+        count_symbols(&rule.0, &mut symbol_counts);
+        count_symbols(&rule.1, &mut symbol_counts);
+    }
+    // sort by count descending
+    let mut sorted_symbols: Vec<_> = symbol_counts.into_iter().collect();
+    sorted_symbols.sort_by_key(|(_, count)| -count.clone());
+    // print out count
+    println!("Symbol counts:");
+    for (symbol, count) in sorted_symbols.iter() {
+        println!("  {}: {}", symbol, count);
+    }
+    // create precedence from sorted symbols
+    for (i, (symbol, _)) in sorted_symbols.iter().enumerate() {
+        let precedence = (symbol.clone(), i);
+        // println!("  Precedence: {:?}", precedence);
+        pre.push(precedence);
+    }
+    panic!();
+
+
+
+
+
     kbe.R = vec![];
     let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
     kbe.R = state.0;
