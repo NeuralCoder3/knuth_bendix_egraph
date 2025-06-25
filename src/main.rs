@@ -525,6 +525,77 @@ where
     return new_rules;
 }
 
+
+pub fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym,Id)>, t: &Term) -> Term {
+    match t {
+        Term::Variable(xi) => {
+            if let Some((_, id)) = ss.iter().find(|(var, _)| var == xi) {
+                // if we have a substitution for this variable, return the term at that id
+                extract_term(kbe, *id)
+            } else {
+                t.clone() // no substitution, return original term
+            }
+            // if let Some(s) = find_substitution(xi, ss) {
+            //     s.clone()
+            // } else {
+            //     t.clone()
+            // }
+        }
+        Term::Function(f, ts) => {
+            let new_ts = ts.iter().map(|t| subst_node(kbe,ss, t)).collect();
+            Term::Function(f.clone(), new_ts)
+        }
+    }
+}
+
+
+fn simplify_dag_var<F>(lpo: &F, kbe: &mut KBEGraph) -> RuleSet
+where
+    F: Fn(&Term, &Term) -> bool,
+{
+    let mut new_rules = vec![];
+    for (l,r) in kbe.R.iter() {
+        for id in kbe.C.left_values().cloned() {
+            let mut subst = vec![];
+            if match_rule_var_subst(kbe, l, id, &mut subst) {
+                println!("Match rule {:?} on node {}", strterm(l), id);
+                // TODO: the extract and embed is unecessary and expensive!
+                let r_inst = subst_node(kbe, &subst, r);
+                println!("  Instantiated: {:?}", r_inst);
+                // // println!("  Substitution: {:?}", subst);
+                // let r_inst = subst(r, &subst);
+                // // println!("  Instantiated: {:?}", r_inst);
+                let r_id = insert_term(&r_inst, kbe);
+                // println!("  Inserted new term with id {}", r_id);
+                kbe.C.remove_by_left(&id);
+                assert!(!kbe.S.contains_key(&id), "Node with id {} already replaced", id);
+                kbe.S.insert(id, r_id); // keep track of replacement
+            }
+        }
+    }
+    panic!("Not implemented yet");
+
+    // let rules = kbe
+    //     .R
+    //     .iter()
+    //     .map(|(l, r)| (l.clone(), r.clone()))
+    //     .flat_map(|(l, r)| instantiate_pair(lpo, &l, &r, ground_instances, true))
+    //     .collect::<Vec<_>>();
+    // new_rules.extend(apply_rules(kbe, &rules, false));
+    // let eq_rules = kbe
+    //     .E
+    //     .iter()
+    //     .map(|(l, r)| (l.clone(), r.clone()))
+    //     .flat_map(|(l, r)| instantiate_pair(lpo, &l, &r, ground_instances, false))
+    //     .collect::<Vec<_>>();
+    // new_rules.extend(apply_rules(kbe, &eq_rules, true));
+
+    return new_rules;
+}
+
+
+
+
 // { I(M(x, y)) -> M(I(y), I(x))
 //   M(x, M(I(x), z)) -> z
 //   M(x, I(x)) -> E
@@ -614,11 +685,6 @@ fn main() {
     // kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
 
 
-    // Step 0 (define precedence)
-    let pre: Precedence = vec![
-    ];
-    let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
-
     // Step 1 (build KBE graph)
     // \\ c b. (add (mul c b) (mul c (neg b)))
     //  (app (app S (app (app B S) (app (app B (app B add)) mul))) (app (app R neg) (app (app B B) mul)))
@@ -703,19 +769,22 @@ fn main() {
     }
     // sort by count descending
     let mut sorted_symbols: Vec<_> = symbol_counts.into_iter().collect();
-    sorted_symbols.sort_by_key(|(_, count)| -count.clone());
+    sorted_symbols.sort_by_key(|(_, count)| -(*count as i64)); // sort by count descending
     // print out count
     println!("Symbol counts:");
     for (symbol, count) in sorted_symbols.iter() {
         println!("  {}: {}", symbol, count);
     }
     // create precedence from sorted symbols
+    let mut pre: Precedence = vec![
+    ];
     for (i, (symbol, _)) in sorted_symbols.iter().enumerate() {
-        let precedence = (symbol.clone(), i);
         // println!("  Precedence: {:?}", precedence);
-        pre.push(precedence);
+        pre.push((symbol.clone(), i as i32));
     }
-    panic!();
+    // panic!();
+    // Step 0 (define precedence)
+    let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
 
 
@@ -746,14 +815,14 @@ fn main() {
         // let ground_instances = ground_instances(&kbe);
         let mut instances: HashSet<Term> = HashSet::new();
         let mut visited: HashMap<ENode, Term> = HashMap::new();
-        for (_, enode) in kbe.C.iter() {
-            // b
-            let _ = ground_instances(&mut visited, &mut instances, enode, &kbe);
-        }
-        println!("Number of ground instances: {}", instances.len());
-        for t in instances.iter() {
-            println!("  {}", strterm(t));
-        }
+        // for (_, enode) in kbe.C.iter() {
+        //     // b
+        //     let _ = ground_instances(&mut visited, &mut instances, enode, &kbe);
+        // }
+        // println!("Number of ground instances: {}", instances.len());
+        // for t in instances.iter() {
+        //     println!("  {}", strterm(t));
+        // }
         // assert that all rules in R are oriented according to the lpo
         for rule in kbe.R.iter() {
             let (l, r) = rule;
@@ -769,8 +838,11 @@ fn main() {
 
         // is from E already onriented/grounded is oriented
 
+        
+        println!("Simplify DAG.");
         // // rules + ->eq + <-eq
-        let new_rules = simplify_dag(&lpo, &mut kbe, &instances);
+        // let new_rules = simplify_dag(&lpo, &mut kbe, &instances);
+        let new_rules = simplify_dag_var(&lpo, &mut kbe);
         println!("New rules:");
         printrules(&new_rules);
         // kbe.R.extend(new_rules);
