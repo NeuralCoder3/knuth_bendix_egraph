@@ -549,31 +549,132 @@ pub fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym,Id)>, t: &Term) -> Term {
 }
 
 
+fn apply_rules_var(
+    kbe: &mut KBEGraph,
+    rules: &RuleSet,  // grounded rules
+    both_sides: bool, // check reversed side for ground equations to add to rule set
+) -> RuleSet {
+    let mut applied = vec![];
+
+    for (l,r) in kbe.R.iter() {
+        for id in kbe.C.left_values() {
+            let mut subst = vec![];
+            if match_rule_var_subst(kbe, l, *id, &mut subst) {
+                println!("DBG: Match rule {:?} on node {}", strterm(l), id);
+                // TODO: l_inst could be extract
+                let l_inst = subst_node(kbe, &subst, l);
+                // TODO: the extract and embed is unecessary and expensive!
+                let r_inst = subst_node(kbe, &subst, r);
+                println!("DBG:   Instantiated: {:?}", r_inst);
+                applied.push((id.clone(), (l_inst, r_inst)));
+            }
+        }
+    }
+
+    for (i, (_,r)) in applied.iter() {
+        // we insert the term resulting in id r_id
+        // then we need to replace the old node
+        // remove new r_id node, i node and write to i
+        println!("  Replace node {} with new term {} (previously {})", i, strterm(&r), strterm(&extract_term(kbe, *i)));
+        // TODO: r_id might already exist => do not first create but only construct term
+        let r_id = insert_term(&r, kbe);
+        kbe.C.remove_by_left(i);
+        assert!(!kbe.S.contains_key(i), "Node with id {} already replaced", i);
+        kbe.S.insert(*i, r_id); // keep track of replacement
+    }
+
+    // both sides => check if right sides matches then add rules to applied
+    if both_sides {
+        for (id, node) in kbe.C.iter() {
+            // let applicable = rules.iter().filter(|(_, r)| match_rule_var(kbe, r, node));
+            // applied.extend(applicable.map(|rule| {
+            //     // TODO: clone not necessary
+            //     (id.clone(), rule)
+            // }))
+            for (rule_l, rule_r) in rules.iter() {
+                let mut subst = vec![];
+                if match_rule_var_subst(kbe, rule_r, *id, &mut subst) {
+                    println!("Match rule {:?} on node {}", strterm(rule_r), id);
+                    let l_inst = subst_node(kbe, &subst, rule_l);
+                    let r_inst = subst_node(kbe, &subst, rule_r);
+                    println!("  Instantiated: {:?}", r_inst);
+                    applied.push((id.clone(), (l_inst, r_inst)));
+                }
+            }
+        }
+        // deduplicate
+        applied.sort_by_key(|(id, _)| id.clone());
+        applied.dedup_by_key(|(id, _)| id.clone());
+    }
+
+    return applied
+        .into_iter()
+        .map(|(_, rule)| {
+            rule.clone() // TODO: clone not necessary
+        })
+        .collect::<Vec<_>>();
+}
+
 fn simplify_dag_var<F>(lpo: &F, kbe: &mut KBEGraph) -> RuleSet
 where
     F: Fn(&Term, &Term) -> bool,
 {
     let mut new_rules = vec![];
-    for (l,r) in kbe.R.iter() {
-        for id in kbe.C.left_values().cloned() {
-            let mut subst = vec![];
-            if match_rule_var_subst(kbe, l, id, &mut subst) {
-                println!("Match rule {:?} on node {}", strterm(l), id);
-                // TODO: the extract and embed is unecessary and expensive!
-                let r_inst = subst_node(kbe, &subst, r);
-                println!("  Instantiated: {:?}", r_inst);
-                // // println!("  Substitution: {:?}", subst);
-                // let r_inst = subst(r, &subst);
-                // // println!("  Instantiated: {:?}", r_inst);
-                let r_id = insert_term(&r_inst, kbe);
-                // println!("  Inserted new term with id {}", r_id);
-                kbe.C.remove_by_left(&id);
-                assert!(!kbe.S.contains_key(&id), "Node with id {} already replaced", id);
-                kbe.S.insert(id, r_id); // keep track of replacement
-            }
-        }
-    }
-    panic!("Not implemented yet");
+
+    new_rules.extend(
+        apply_rules_var(
+            kbe, 
+            &kbe.R.iter()
+                .map(|(l, r)| (l.clone(), r.clone()))
+                .collect::<Vec<_>>(),
+            false
+    ));
+    new_rules.extend(
+        apply_rules_var(
+            kbe, 
+            &kbe.E.iter()
+                .map(|(l, r)| (l.clone(), r.clone()))
+                .collect::<Vec<_>>(),
+            true
+    ));
+
+
+    // let applied = vec![];
+
+    // for (l,r) in kbe.R.iter() {
+    //     for id in kbe.C.left_values() {
+    //         let mut subst = vec![];
+    //         if match_rule_var_subst(kbe, l, id, &mut subst) {
+    //             println!("Match rule {:?} on node {}", strterm(l), id);
+    //             // TODO: the extract and embed is unecessary and expensive!
+    //             let r_inst = subst_node(kbe, &subst, r);
+    //             println!("  Instantiated: {:?}", r_inst);
+    //             applied.push((id, r_inst));
+    //             // // // println!("  Substitution: {:?}", subst);
+    //             // // let r_inst = subst(r, &subst);
+    //             // // // println!("  Instantiated: {:?}", r_inst);
+    //             // let r_id = insert_term(&r_inst, kbe);
+    //             // // println!("  Inserted new term with id {}", r_id);
+    //             // kbe.C.remove_by_left(&id);
+    //             // assert!(!kbe.S.contains_key(&id), "Node with id {} already replaced", id);
+    //             // kbe.S.insert(id, r_id); // keep track of replacement
+    //         }
+    //     }
+    // }
+
+
+    // for (i, r) in applied.iter() {
+    //     // we insert the term resulting in id r_id
+    //     // then we need to replace the old node
+    //     // remove new r_id node, i node and write to i
+    //     println!("  Replace node {} with new term {} (previously {})", i, strterm(&r), strterm(&extract_term(kbe, *i)));
+    //     // TODO: r_id might already exist => do not first create but only construct term
+    //     let r_id = insert_term(r, kbe);
+    //     kbe.C.remove_by_left(i);
+    //     assert!(!kbe.S.contains_key(i), "Node with id {} already replaced", i);
+    //     kbe.S.insert(*i, r_id); // keep track of replacement
+    // }
+    // panic!("Not implemented yet");
 
     // let rules = kbe
     //     .R
@@ -683,13 +784,10 @@ fn main() {
 
     // // Step 2 (orient rules in initial KBO step)
     // kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
+    // let t = parseterm("M(I(A), M(A, B))"); // -> B
 
 
     // Step 1 (build KBE graph)
-    // \\ c b. (add (mul c b) (mul c (neg b)))
-    //  (app (app S (app (app B S) (app (app B (app B add)) mul))) (app (app R neg) (app (app B B) mul)))
-    let t = parseterm("App(App(S, App(App(B, S), App(App(B, App(B, Add)), Mul))), App(App(R, Neg), App(App(B, B), Mul)))"); // -> Add
-    let t_id = insert_term(&t, &mut kbe);
 
     // Step 2 (orient rules in initial KBO step)
     kbe.E = parseeqs(
@@ -752,9 +850,15 @@ fn main() {
 "App(App(S,App(App(B,C),App(App(B,App(B,B)),App(App(B,App(B,Add)),mul)))),mul)=App(App(R,Add),App(App(B,B),App(App(B,B),mul)))", // distr-l-2
 "App(App(B,neg),neg)=I", // double-neg
         ]
-
     );
+    
+    // \\ c b. (add (mul c b) (mul c (neg b)))
+    //  (app (app S (app (app B S) (app (app B (app B add)) mul))) (app (app R neg) (app (app B B) mul)))
+    let t = parseterm("App(App(S, App(App(B, S), App(App(B, App(B, Add)), Mul))), App(App(R, Neg), App(App(B, B), Mul)))"); // -> 0
 
+
+
+    let t_id = insert_term(&t, &mut kbe);
 
     // compute precedence by occurence count often => higher
     let mut symbol_counts = HashMap::new();
@@ -769,7 +873,7 @@ fn main() {
     }
     // sort by count descending
     let mut sorted_symbols: Vec<_> = symbol_counts.into_iter().collect();
-    sorted_symbols.sort_by_key(|(_, count)| -(*count as i64)); // sort by count descending
+    sorted_symbols.sort_by_key(|(_, count)| (*count as i64)); // sort by count descending
     // print out count
     println!("Symbol counts:");
     for (symbol, count) in sorted_symbols.iter() {
@@ -787,6 +891,14 @@ fn main() {
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
 
+    // let pre: Precedence = vec![
+    //     (String::from("I"), 3),
+    //     (String::from("M"), 1),
+    //     (String::from("E"), 2),
+    //     (String::from("A"), 0), // e.g. for test term
+    //     (String::from("B"), 0), // e.g. for test term
+    // ];
+    // let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
 
 
