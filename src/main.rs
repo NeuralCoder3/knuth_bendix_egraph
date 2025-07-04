@@ -925,6 +925,16 @@ fn main() {
         // println!("  Precedence: {:?}", precedence);
         pre.push((symbol.clone(), i as i32));
     }
+
+    let pre: Precedence = vec![
+        (String::from("Mul"), 1),
+        (String::from("One"), 2),
+        (String::from("Inv"), 3),
+        (String::from("A"), 0), // e.g. for test term
+        (String::from("B"), 0), // e.g. for test term
+        (String::from("C"), 0), // e.g. for test term
+    ];
+
     // panic!();
     // Step 0 (define precedence)
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
