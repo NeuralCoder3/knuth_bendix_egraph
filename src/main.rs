@@ -549,11 +549,16 @@ pub fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym,Id)>, t: &Term) -> Term {
 }
 
 
-fn apply_rules_var(
+fn apply_rules_var<F>(
+    lpo: &F,
     kbe: &mut KBEGraph,
     rules: &RuleSet,  // grounded rules
     both_sides: bool, // check reversed side for ground equations to add to rule set
-) -> RuleSet {
+) -> RuleSet 
+where
+    F: Fn(&Term, &Term) -> bool,
+{
+    // where applied, should rewrite, rule
     let mut applied = vec![];
 
     for (l,r) in kbe.R.iter() {
@@ -566,12 +571,38 @@ fn apply_rules_var(
                 // TODO: the extract and embed is unecessary and expensive!
                 let r_inst = subst_node(kbe, &subst, r);
                 println!("DBG:   Instantiated: {} -> {:?}", strterm(&l_inst), strterm(&r_inst));
-                applied.push((id.clone(), (l_inst, r_inst)));
+                // check both_sides for efficiency -- otherwise we already know l_inst > r_inst
+                if both_sides && lpo(&r_inst, &l_inst) {
+                    println!("DBG:     Oriented in reverse (not rewrite)");
+                    applied.push((id.clone(), false, (r_inst, l_inst)));
+                }else {
+                    applied.push((id.clone(), true, (l_inst, r_inst)));
+                }
+            }
+            if both_sides {
+                let mut subst = vec![];
+                if match_rule_var_subst(kbe, r, *id, &mut subst) {
+                    println!("DBG: Match rule {:?} -> {:?} on node {} ({})", strterm(r), strterm(l), id, strterm(&extract_term(kbe, *id)));
+                    // TODO: l_inst could be extract
+                    let l_inst = subst_node(kbe, &subst, l);
+                    // TODO: the extract and embed is unecessary and expensive!
+                    let r_inst = subst_node(kbe, &subst, r);
+                    println!("DBG:   Instantiated: {} -> {:?}", strterm(&r_inst), strterm(&l_inst));
+                    if lpo(&l_inst, &r_inst) {
+                        println!("DBG:     Oriented in reverse (not rewrite)");
+                        applied.push((id.clone(), false, (l_inst, r_inst)));
+                    }else {
+                        applied.push((id.clone(), true, (r_inst, l_inst)));
+                    }
+                }
             }
         }
     }
 
-    for (i, (_,r)) in applied.iter() {
+    for (i, should_rewrite, (_,r)) in applied.iter() {
+        if !should_rewrite {
+            continue;
+        }
         // we insert the term resulting in id r_id
         // then we need to replace the old node
         // remove new r_id node, i node and write to i
@@ -584,32 +615,32 @@ fn apply_rules_var(
     }
 
     // both sides => check if right sides matches then add rules to applied
-    if both_sides {
-        for (id, node) in kbe.C.iter() {
-            // let applicable = rules.iter().filter(|(_, r)| match_rule_var(kbe, r, node));
-            // applied.extend(applicable.map(|rule| {
-            //     // TODO: clone not necessary
-            //     (id.clone(), rule)
-            // }))
-            for (rule_l, rule_r) in rules.iter() {
-                let mut subst = vec![];
-                if match_rule_var_subst(kbe, rule_r, *id, &mut subst) {
-                    println!("DBG: Rev-Match rule {:?} -> {:?} on node {} ({})", strterm(rule_l), strterm(rule_r), id, strterm(&extract_term(kbe, *id)));
-                    let l_inst = subst_node(kbe, &subst, rule_l);
-                    let r_inst = subst_node(kbe, &subst, rule_r);
-                    println!("DBG:  Instantiated: {} -> {:?}", strterm(&l_inst), strterm(&r_inst));
-                    applied.push((id.clone(), (l_inst, r_inst)));
-                }
-            }
-        }
-        // deduplicate
-        applied.sort_by_key(|(id, _)| id.clone());
-        applied.dedup_by_key(|(id, _)| id.clone());
-    }
+    // if both_sides {
+    //     for (id, node) in kbe.C.iter() {
+    //         // let applicable = rules.iter().filter(|(_, r)| match_rule_var(kbe, r, node));
+    //         // applied.extend(applicable.map(|rule| {
+    //         //     // TODO: clone not necessary
+    //         //     (id.clone(), rule)
+    //         // }))
+    //         for (rule_l, rule_r) in rules.iter() {
+    //             let mut subst = vec![];
+    //             if match_rule_var_subst(kbe, rule_r, *id, &mut subst) {
+    //                 println!("DBG: Rev-Match rule {:?} -> {:?} on node {} ({})", strterm(rule_l), strterm(rule_r), id, strterm(&extract_term(kbe, *id)));
+    //                 let l_inst = subst_node(kbe, &subst, rule_l);
+    //                 let r_inst = subst_node(kbe, &subst, rule_r);
+    //                 println!("DBG:  Instantiated: {} -> {:?}", strterm(&l_inst), strterm(&r_inst));
+    //                 applied.push((id.clone(), (l_inst, r_inst)));
+    //             }
+    //         }
+    //     }
+    //     // deduplicate
+    //     applied.sort_by_key(|(id, _)| id.clone());
+    //     applied.dedup_by_key(|(id, _)| id.clone());
+    // }
 
     return applied
         .into_iter()
-        .map(|(_, rule)| {
+        .map(|(_, _, rule)| {
             rule.clone() // TODO: clone not necessary
         })
         .collect::<Vec<_>>();
@@ -623,6 +654,7 @@ where
 
     new_rules.extend(
         apply_rules_var(
+            lpo,
             kbe, 
             &kbe.R.iter()
                 .map(|(l, r)| (l.clone(), r.clone()))
@@ -631,6 +663,7 @@ where
     ));
     new_rules.extend(
         apply_rules_var(
+            lpo,
             kbe, 
             &kbe.E.iter()
                 .map(|(l, r)| (l.clone(), r.clone()))
