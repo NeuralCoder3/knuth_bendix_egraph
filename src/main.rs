@@ -960,7 +960,7 @@ fn main() {
     }
 
 
-    let pre: Precedence = vec![
+    let mut pre: Precedence = vec![
         (String::from("Mul"), 1),
         (String::from("One"), 2),
         (String::from("Inv"), 3),
@@ -969,7 +969,7 @@ fn main() {
         (String::from("C"), 0), // e.g. for test term
     ];
 
-    pre.sort();
+    pre.sort_by_key(|(_, count)| *count as i64);
     println!("Final precedence:");
     for (symbol, count) in pre.iter() {
         println!("  {}: {}", symbol, count);
@@ -1128,9 +1128,10 @@ fn main() {
         counted_cps.sort_by_key(|(_, count)| -count.clone());
         // take top 5 to extend E
         let top_cps = counted_cps.into_iter().take(5).map(|(cp, _)| cp.clone()).collect::<Vec<_>>();
+        // let top_cps = counted_cps.into_iter().map(|(cp, _)| cp.clone()).collect::<Vec<_>>();
         println!("Top 5 critical pairs:");
         for (l, r) in top_cps.iter() {
-            println!("  {} -> {}", strterm(l), strterm(r));
+            println!("  {} = {}", strterm(l), strterm(r));
         }
         // TODO: not clone
         kbe.E.extend(
