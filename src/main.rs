@@ -915,7 +915,7 @@ fn main() {
             "M(I(x), x) = E",
 
             // One Group Endomorphism (Figure 7-1/7-2, page 51)
-            // "F(Mul(x, y)) = Mul(F(x), F(y))",
+            // "F(M(x, y)) = M(F(x), F(y))",
 
             // Two Commuting Endomorphisms (Figure 7-5/7-6, page 53)
             // "G(Mul(x, y)) = Mul(G(x), G(y))",
@@ -977,16 +977,16 @@ fn main() {
     }
 
 
-    let mut pre: Precedence = vec![
-        (String::from("M"), 1),
-        (String::from("E"), 2),
-        (String::from("I"), 3),
+    // let mut pre: Precedence = vec![
+    //     (String::from("M"), 1),
+    //     (String::from("E"), 2),
+    //     (String::from("I"), 3),
 
-        // for test term
-        (String::from("A"), 0), 
-        (String::from("B"), 0),
-        (String::from("C"), 0),
-    ];
+    //     // for test term
+    //     (String::from("A"), 0), 
+    //     (String::from("B"), 0),
+    //     (String::from("C"), 0),
+    // ];
 
     pre.sort_by_key(|(_, count)| *count as i64);
     println!("Final precedence:");
@@ -1169,7 +1169,7 @@ fn main() {
         .collect::<Vec<_>>();
         // sort by count descending
         // counted_cps.sort_by_key(|(_, count)| -count.clone());
-        counted_cps.sort_by_key(|(_, count, rule_count, size)| (-count.clone(), -rule_count.clone(), -size.clone()));
+        counted_cps.sort_by_key(|(_, count, rule_count, size)| (-count.clone(), -rule_count.clone(), size.clone()));
         // counted_cps.sort_by_key(|(_, count, rule_count)| (-count.clone()+ -rule_count.clone()));
         // take top 5 to extend E
         let top_cps = counted_cps.into_iter().take(5).map(|(cp, _, _, _)| cp.clone()).collect::<Vec<_>>();
