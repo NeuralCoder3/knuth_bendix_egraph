@@ -958,6 +958,15 @@ fn main() {
         // println!("  Precedence: {:?}", precedence);
         pre.push((symbol.clone(), i as i32));
     }
+
+    pre.sort();
+
+
+    println!("Final precedence:");
+    for (symbol, count) in pre.iter() {
+        println!("  {}: {}", symbol, count);
+    }
+
     // panic!();
     // Step 0 (define precedence)
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
