@@ -306,7 +306,7 @@ fn apply_rules(
         // then we need to replace the old node
         // remove new r_id node, i node and write to i
         println!("  Replace node {} with new term {} (previously {} = {})", i, strterm(&rule.1), strterm(&rule.0), strterm(&extract_term(kbe, *i)));
-        let (l, r) = rule;
+        let (_l, r) = rule;
         // TODO: r_id might already exist => do not first create but only construct term
         let r_id = insert_term(r, kbe);
         kbe.C.remove_by_left(i);
@@ -786,6 +786,18 @@ fn count_symbols(t: &Term, map: &mut HashMap<String, usize>) {
     }
 }
 
+fn term_contains(t: &Term, subterm: &Term) -> bool {
+    if let Some(_) = collate(subterm, t) {
+        return true;
+    }
+    match t {
+        Term::Function(_, ts) => {
+            ts.iter().any(|t_prime| term_contains(t_prime, subterm))
+        }
+        _ => false,
+    }
+}
+
 
 fn main() {
     let mut kbe = KBEGraph {
@@ -895,9 +907,12 @@ fn main() {
     kbe.E = parseeqs(
         vec![
             // Group (Figure 3-1/3-2, page 25)
-            "Mul(One, x) = One",
-            "Mul(Mul(x, y), z) = Mul(x, Mul(y, z))",
-            "Mul(Inv(x), x) = One",
+            // "Mul(One, x) = One",
+            // "Mul(Mul(x, y), z) = Mul(x, Mul(y, z))",
+            // "Mul(Inv(x), x) = One",
+            "M(E, x) = x",
+            "M(M(x, y), z) = M(x, M(y, z))",
+            "M(I(x), x) = E",
 
             // One Group Endomorphism (Figure 7-1/7-2, page 51)
             // "F(Mul(x, y)) = Mul(F(x), F(y))",
@@ -913,7 +928,9 @@ fn main() {
         ]
     );
     // let t = parseterm("Mul(A, Mul(Inv(A), Mul(Mul(B, C), Mul(Inv(C), Inv(B)))))"); // -> One
-    let t = parseterm("Mul(A, Mul(Inv(A), B))"); // -> One
+    // let t = parseterm("M(A, M(I(A), M(M(B, C), M(I(C), I(B)))))"); // -> One
+    // let t = parseterm("M(A, M(I(A), B))"); // -> One
+    let t = parseterm("M(A, I(A))"); // -> One
 
 
 
@@ -961,12 +978,14 @@ fn main() {
 
 
     let mut pre: Precedence = vec![
-        (String::from("Mul"), 1),
-        (String::from("One"), 2),
-        (String::from("Inv"), 3),
-        (String::from("A"), 0), // e.g. for test term
-        (String::from("B"), 0), // e.g. for test term
-        (String::from("C"), 0), // e.g. for test term
+        (String::from("M"), 1),
+        (String::from("E"), 2),
+        (String::from("I"), 3),
+
+        // for test term
+        (String::from("A"), 0), 
+        (String::from("B"), 0),
+        (String::from("C"), 0),
     ];
 
     pre.sort_by_key(|(_, count)| *count as i64);
@@ -1007,7 +1026,7 @@ fn main() {
     println!("{}", strterm(&t_prime));
 
     // Step 3 (loop)
-    for i in 0..5 {
+    for i in 0..3 {
         println!();
         println!();
         println!("Iteration {}", i);
@@ -1059,13 +1078,18 @@ fn main() {
         kbe.E.extend(new_rules);
 
         // Step 3.2 (KBO: Add critical pairs)
+        // TODO: keep previous critical pairs instead of complete recomputation
         let mut cps = vec![];
         for (i, rule1) in kbe.R.iter().enumerate() {
             for (j, rule2) in kbe.R.iter().enumerate() {
                 if i > j {
                     continue; // only consider pairs once
                 }
+                println!("DBG: Critical pair: {} -> {} with {} -> {}", strterm(&rule1.0), strterm(&rule1.1), strterm(&rule2.0), strterm(&rule2.1));
                 let cp = critical_pair(rule1, rule2);
+                for (c_l, c_r) in cp.iter() {
+                    println!("DBG:   OrgCritical pair: {} = {}", strterm(c_l), strterm(c_r));
+                }
                 // simplify using R
                 let simpl_cp = 
                     cp.into_iter()
@@ -1082,7 +1106,7 @@ fn main() {
                 if simpl_cp.is_empty() {
                     continue;
                 }
-                println!("DBG: Critical pair: {} -> {} with {} -> {}", strterm(&rule1.0), strterm(&rule1.1), strterm(&rule2.0), strterm(&rule2.1));
+                // println!("DBG: Critical pair: {} -> {} with {} -> {}", strterm(&rule1.0), strterm(&rule1.1), strterm(&rule2.0), strterm(&rule2.1));
                 for (simpl_l, simpl_r) in simpl_cp.iter() {
                     println!("DBG:  Simplified critical pair: {} = {}", strterm(simpl_l), strterm(simpl_r));
                 }
@@ -1117,7 +1141,26 @@ fn main() {
                     count += 1;
                 }
             }
-            (cp, count)
+
+            let mut rule_count = 0;
+            for (l_rule, r_rule) in kbe.R.iter() {
+                if term_contains(&l_rule, l) {
+                    rule_count += 1;
+                }
+                if term_contains(&r_rule, l) {
+                    rule_count += 1;
+                }
+                if term_contains(&l_rule, r) {
+                    rule_count += 1;
+                }
+                if term_contains(&r_rule, r) {
+                    rule_count += 1;
+                }
+            }
+
+            let size = (strterm(&l).len() + strterm(&r).len()) as i32;
+
+            (cp, count, rule_count, size)
         })
         // TODO: filter does not work
         // e.g. group axioms with Mul(A, Mul(Inv(A), B)) -> B
@@ -1125,9 +1168,11 @@ fn main() {
         // .filter(|(_, count)| *count > 0) // only keep those with count > 0
         .collect::<Vec<_>>();
         // sort by count descending
-        counted_cps.sort_by_key(|(_, count)| -count.clone());
+        // counted_cps.sort_by_key(|(_, count)| -count.clone());
+        counted_cps.sort_by_key(|(_, count, rule_count, size)| (-count.clone(), -rule_count.clone(), -size.clone()));
+        // counted_cps.sort_by_key(|(_, count, rule_count)| (-count.clone()+ -rule_count.clone()));
         // take top 5 to extend E
-        let top_cps = counted_cps.into_iter().take(5).map(|(cp, _)| cp.clone()).collect::<Vec<_>>();
+        let top_cps = counted_cps.into_iter().take(5).map(|(cp, _, _, _)| cp.clone()).collect::<Vec<_>>();
         // let top_cps = counted_cps.into_iter().map(|(cp, _)| cp.clone()).collect::<Vec<_>>();
         println!("Top 5 critical pairs:");
         for (l, r) in top_cps.iter() {
