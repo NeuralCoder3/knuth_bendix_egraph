@@ -959,9 +959,17 @@ fn main() {
         pre.push((symbol.clone(), i as i32));
     }
 
+
+    let pre: Precedence = vec![
+        (String::from("Mul"), 1),
+        (String::from("One"), 2),
+        (String::from("Inv"), 3),
+        (String::from("A"), 0), // e.g. for test term
+        (String::from("B"), 0), // e.g. for test term
+        (String::from("C"), 0), // e.g. for test term
+    ];
+
     pre.sort();
-
-
     println!("Final precedence:");
     for (symbol, count) in pre.iter() {
         println!("  {}: {}", symbol, count);
