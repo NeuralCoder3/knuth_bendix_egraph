@@ -915,16 +915,16 @@ fn main() {
             "M(I(x), x) = E",
 
             // One Group Endomorphism (Figure 7-1/7-2, page 51)
-            // "F(M(x, y)) = M(F(x), F(y))",
+            "F(M(x, y)) = M(F(x), F(y))",
 
             // Two Commuting Endomorphisms (Figure 7-5/7-6, page 53)
-            // "G(Mul(x, y)) = Mul(G(x), G(y))",
-            // "Mul(F(x), G(y)) = Mul(G(y), F(x))",
+            "G(M(x, y)) = M(G(x), G(y))",
+            "M(F(x), G(y)) = M(G(y), F(x))",
 
             // Three Commuting Endomorphisms (https://github.com/iwehrman/Slothrop/blob/master/tests/cge3.tptp)
-            // "H(Mul(x, y)) = Mul(H(x), H(y))",
-            // "Mul(F(x), H(y)) = Mul(H(y), F(x))",
-            // "Mul(G(x), H(y)) = Mul(H(y), G(x))",
+            "H(M(x, y)) = M(H(x), H(y))",
+            "M(F(x), H(y)) = M(H(y), F(x))",
+            "M(G(x), H(y)) = M(H(y), G(x))",
         ]
     );
     // let t = parseterm("Mul(A, Mul(Inv(A), Mul(Mul(B, C), Mul(Inv(C), Inv(B)))))"); // -> One
