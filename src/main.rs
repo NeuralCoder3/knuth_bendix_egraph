@@ -930,7 +930,18 @@ fn main() {
     // let t = parseterm("Mul(A, Mul(Inv(A), Mul(Mul(B, C), Mul(Inv(C), Inv(B)))))"); // -> One
     // let t = parseterm("M(A, M(I(A), M(M(B, C), M(I(C), I(B)))))"); // -> One
     // let t = parseterm("M(A, M(I(A), B))"); // -> One
-    let t = parseterm("M(A, I(A))"); // -> One
+    // let t = parseterm("M(A, I(A))"); // -> One
+    // let t = parseterm("M(I(A), M(M(G(A), G(M(A, I(A)))), M(F(A), M(F(A), I(A)))))");
+    // let t = parseterm("M(F(A), M(F(I(A)), M(F(B), G(C))))");
+    // let t = parseterm("M(F(A), F(I(A)))");
+    // let t = parseterm("F(M(A, I(A)))");
+    // let t = parseterm("I(G(I(A)))");  // G(A)
+    // let t = parseterm("I(M(I(F(I(X))),F(I(X))))"); // E
+    // g(b) * f(i(a)) * g(i(b))
+    // let t = parseterm("M(G(B), M(G(I(B)), F(I(A))))"); // I(F(A))
+
+    // TODO: it pulls the I outside and can't rewrite the f*g
+    let t = parseterm("M(G(B), M(F(I(A)), G(I(B))))"); // -> F(I(A))
 
 
 
@@ -974,6 +985,7 @@ fn main() {
     for (i, (symbol, _)) in sorted_symbols.iter().enumerate() {
         // println!("  Precedence: {:?}", precedence);
         pre.push((symbol.clone(), i as i32));
+        // pre.push((symbol.clone(), -(i as i32)));
     }
 
 
@@ -1026,7 +1038,8 @@ fn main() {
     println!("{}", strterm(&t_prime));
 
     // Step 3 (loop)
-    for i in 0..3 {
+    // for i in 0..100 {
+    for i in 0..30 {
         println!();
         println!();
         println!("Iteration {}", i);
@@ -1169,7 +1182,9 @@ fn main() {
         .collect::<Vec<_>>();
         // sort by count descending
         // counted_cps.sort_by_key(|(_, count)| -count.clone());
-        counted_cps.sort_by_key(|(_, count, rule_count, size)| (-count.clone(), -rule_count.clone(), size.clone()));
+        // counted_cps.sort_by_key(|(_, count, rule_count, size)| (-count.clone(), -rule_count.clone(), size.clone()));
+        // counted_cps.sort_by_key(|(_, count, rule_count, size)| size.clone());
+        counted_cps.sort_by_key(|(_, count, rule_count, size)| (size.clone(), -rule_count.clone(), -count.clone()));
         // counted_cps.sort_by_key(|(_, count, rule_count)| (-count.clone()+ -rule_count.clone()));
         // take top 5 to extend E
         let top_cps = counted_cps.into_iter().take(5).map(|(cp, _, _, _)| cp.clone()).collect::<Vec<_>>();
