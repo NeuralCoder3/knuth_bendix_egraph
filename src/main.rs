@@ -657,6 +657,12 @@ where
         if !should_rewrite {
             continue;
         }
+        // TODO: double replacement
+        if (kbe.S.contains_key(i)) {
+            // already replaced, skip
+            println!("DBG: Node {} already replaced, skipping", i);
+            continue;
+        }
         // we insert the term resulting in id r_id
         // then we need to replace the old node
         // remove new r_id node, i node and write to i
@@ -961,7 +967,7 @@ fn main() {
         "M(F(x), H(y)) = M(H(y), F(x))",
         "M(G(x), H(y)) = M(H(y), G(x))",
         // abelian group
-        "M(x, y) = M(y, x)", // commutativity
+        // "M(x, y) = M(y, x)", // commutativity
                              // "M(I(x), M(y, x)) = M(I(y), M(x, y))", // inverse
     ]);
     // let t = parseterm("Mul(A, Mul(Inv(A), Mul(Mul(B, C), Mul(Inv(C), Inv(B)))))"); // -> One
@@ -979,10 +985,10 @@ fn main() {
 
     // TODO: it pulls the I outside and can't rewrite the f*g
     // let t = parseterm("M(G(B), M(F(I(A)), G(I(B))))"); // -> F(I(A)) does not work
-    // let t = parseterm("M(G(I(B)), M(F(A), G(B)))"); // -> F(I(A)) does not work
+    let t = parseterm("M(G(I(B)), M(F(A), G(B)))"); // -> F(I(A)) does not work
     // let t = parseterm("M(I(B), M(A, B))"); // -> A
     // let t = parseterm("M(F(I(A)), M(F(B), F(A)))"); // -> F(B) does not work
-    let t = parseterm("M(I(A), M(B, A))"); // -> B
+    // let t = parseterm("M(I(A), M(B, A))"); // -> B
 
     let t_id = insert_term(&t, &mut kbe);
     let mut ids = kbe.C.left_values().cloned().collect::<Vec<_>>();
@@ -1082,8 +1088,8 @@ fn main() {
 
     // Step 3 (loop)
     // for i in 0..100 {
-    // for i in 0..30 {
-    for i in 0..1 {
+    for i in 0..30 {
+    // for i in 0..1 {
         println!();
         println!();
         println!("Iteration {}", i);
