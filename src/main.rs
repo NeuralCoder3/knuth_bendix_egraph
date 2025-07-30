@@ -260,6 +260,7 @@ where
         let ids = kbe.C.iter().map(|(id, _)| (id.clone()));
 
         let mut rewrites = vec![];
+        // println!("DBG: Apply rules {:?} -> {:?}", strterm(l), strterm(r));
 
         for id in ids {
             let mut subst = vec![];
@@ -450,15 +451,15 @@ where
 {
     let mut new_rules = vec![];
 
-    // new_rules.extend(
-    //     apply_rules_var(
-    //         lpo,
-    //         kbe,
-    //         &kbe.R.iter()
-    //             .map(|(l, r)| (l.clone(), r.clone()))
-    //             .collect::<Vec<_>>(),
-    //         false
-    // ));
+    new_rules.extend(
+        apply_rules_var(
+            lpo,
+            kbe,
+            &kbe.R.iter()
+                .map(|(l, r)| (l.clone(), r.clone()))
+                .collect::<Vec<_>>(),
+            false
+    ));
     new_rules.extend(apply_rules_var(
         lpo,
         kbe,
@@ -722,11 +723,11 @@ fn main() {
     // let t = parseterm("M(G(B), M(G(I(B)), F(I(A))))"); // I(F(A)) works
 
     // TODO: it pulls the I outside and can't rewrite the f*g
-    // let t = parseterm("M(G(B), M(F(I(A)), G(I(B))))"); // -> F(I(A)) does not work
-    let t = parseterm("M(G(I(B)), M(F(A), G(B)))"); // -> F(I(A)) does not work
-    // let t = parseterm("M(I(B), M(A, B))"); // -> A
-    // let t = parseterm("M(F(I(A)), M(F(B), F(A)))"); // -> F(B) does not work
-    // let t = parseterm("M(I(A), M(B, A))"); // -> B
+    // let t = parseterm("M(G(B), M(F(I(A)), G(I(B))))"); // -> F(I(A))
+    let t = parseterm("M(G(I(B)), M(F(A), G(B)))"); // -> F(A) works; needs 6 iterations without R, 8 with R
+    // let t = parseterm("M(I(B), M(A, B))"); // -> nothing (no abelian group)
+    // let t = parseterm("M(F(I(A)), M(F(B), F(A)))"); // -> F(B) (only in abelian group)
+    // let t = parseterm("M(I(A), M(B, A))"); // -> B (only in abelian group)
 
     let t_id = insert_term(&t, &mut kbe);
     let mut ids = kbe.C.left_values().cloned().collect::<Vec<_>>();
@@ -827,7 +828,8 @@ fn main() {
     // Step 3 (loop)
     // for i in 0..100 {
     for i in 0..30 {
-    // for i in 0..1 {
+    // for i in 0..6 {
+    // for i in 0..8 {
         println!();
         println!();
         println!("Iteration {}", i);
