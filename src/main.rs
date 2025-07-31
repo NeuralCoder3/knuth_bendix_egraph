@@ -7,35 +7,11 @@ use bimap::BiMap;
 use clap::Parser;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::io;
-use std::process::exit;
-use std::time::Instant;
-use term_rewrite::parseeqs;
 
 use crate::kbo::*;
 use crate::term_rewrite::*;
 use crate::types::*;
 
-#[derive(Parser)]
-#[command(name = "kbo_rust")]
-#[command(about = "KBO (Knuth-Bendix Ordering) implementation in Rust")]
-struct Args {
-    /// Rule file path
-    #[arg(short, long, value_name = "RULEFILE")]
-    rules: Option<String>,
-    
-    /// Term file path
-    #[arg(short, long, value_name = "TERMFILE")]
-    term: Option<String>,
-    
-    /// Number of iterations
-    #[arg(short, long, default_value = "30")]
-    iterations: usize,
-    
-    /// Positional arguments for backward compatibility
-    #[arg(value_name = "POSITIONAL")]
-    positional: Vec<String>,
-}
 
 fn knuth_steps<F>(verbose: bool, lpo: &F, state: &(RuleSet, EquationSet)) -> (RuleSet, EquationSet)
 where
@@ -46,19 +22,11 @@ where
 
     let copy = state.clone();
     if let Ok(oriented) = orient_equation(lpo, copy) {
-        // println!("Oriented:");
-        // printrule(&oriented.0);
         let composed = compose(oriented);
-        // println!("Compose");
         let collapsed = collapse(composed);
-        // println!("Collapse");
         let added = add_rule(collapsed);
-        // println!("Add");
         let simplified = simplify(added);
-        // println!("Simplify");
-        // let simplified = added;
         let removed = remove_trivial(verbose, simplified);
-        // println!("Remove trivial");
         removed
     } else {
         let copy = state.clone();
@@ -75,9 +43,7 @@ where
     let mut changed = true;
     let mut new_state = state;
     while changed {
-        // println!("Knuth loop");
         changed = false;
-        // let (rules, eqs) = new_state;
         let new_state_prime = knuth_steps(verbose, lpo, &new_state);
         if new_state != new_state_prime {
             changed = true;
@@ -95,26 +61,6 @@ struct ENode {
 
 type Id = usize;
 
-// // some id:usize outside, with map (C) usize -> Node  (bidirectional)
-// // term -> id: construct analogous nod, look up in inverse C
-
-// #[derive(Debug, Clone)]
-// struct RawNode {
-//     label: String,
-//     children: Vec<Node>,
-//     // TODO: handle multiple parents
-// }
-// // type Node = Rc<RefCell<RawNode>>; // RefCell needed to set parent children pointer
-// type Node = RawNode;
-
-// fn Node(label: String, children: Vec<Node>) -> Node {
-//     let node = RawNode {
-//         label,
-//         children: children.clone(),
-//     };
-//     node
-// }
-
 #[allow(non_snake_case)]
 struct KBEGraph {
     C: BiMap<Id, ENode>, // can be done as Vec<ENode> with id as index, and an additional C_inv
@@ -131,22 +77,7 @@ struct KBEGraph {
 fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
     match t {
         Term::Variable(var) => {
-            // TODO: panic? term should be grounded
             panic!("Cannot insert variable into KBE graph: {:?}", var);
-            // variable becomes a leaf (recursive calls will handle parents)
-            // let node = ENode {
-            //     label: var.0.clone(),
-            //     children: vec![],
-            // };
-            // #[allow(non_snake_case)]
-            // let C = &mut kbe.C;
-            // if let Some(id) = C.get_by_right(&node) {
-            //     return id.clone();
-            // }
-            // let id = kbe.id_count;
-            // kbe.id_count += 1;
-            // C.insert_no_overwrite(id, node).unwrap();
-            // return id;
         }
         Term::Function(f, ts) => {
             // TODO: normalize here or is input always normalized?
@@ -156,12 +87,6 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
                 let child = insert_term(t_prime, kbe);
                 children.push(child);
             }
-            // DEBUG: all children exist
-            // for child in children.iter() {
-            //     if !kbe.C.contains_left(child) {
-            //         panic!("Child id {} not found in C", child);
-            //     }
-            // }
             let node = ENode {
                 label: f.clone(),
                 children,
@@ -236,11 +161,6 @@ pub fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
             } else {
                 t.clone() // no substitution, return original term
             }
-            // if let Some(s) = find_substitution(xi, ss) {
-            //     s.clone()
-            // } else {
-            //     t.clone()
-            // }
         }
         Term::Function(f, ts) => {
             let new_ts = ts.iter().map(|t| subst_node(kbe, ss, t)).collect();
@@ -330,143 +250,6 @@ where
         }
     }
     return applied;
-
-
-
-    // // where applied, should rewrite, rule
-    // let mut applied = vec![];
-
-    // for (l, r) in rules.iter() {
-    //     for id in kbe.C.left_values() {
-    //         let mut subst = vec![];
-    //         if match_rule_var_subst(kbe, l, *id, &mut subst) {
-    //             println!(
-    //                 "DBG: Match rule {:?} -> {:?} on node {} ({})",
-    //                 strterm(l),
-    //                 strterm(r),
-    //                 id,
-    //                 strterm(&extract_term(kbe, *id))
-    //             );
-    //             // TODO: l_inst could be extract
-    //             let l_inst = subst_node(kbe, &subst, l);
-    //             // TODO: the extract and embed is unecessary and expensive!
-    //             let r_inst = subst_node(kbe, &subst, r);
-    //             println!(
-    //                 "DBG:   Instantiated: {} -> {:?}",
-    //                 strterm(&l_inst),
-    //                 strterm(&r_inst)
-    //             );
-    //             // check both_sides for efficiency -- otherwise we already know l_inst > r_inst
-    //             if both_sides && lpo(&r_inst, &l_inst) {
-    //                 println!("DBG:     Oriented in reverse (not rewrite)");
-    //                 applied.push((id.clone(), false, (r_inst, l_inst)));
-    //             } else {
-    //                 applied.push((id.clone(), true, (l_inst, r_inst)));
-    //             }
-    //         }
-    //         if both_sides {
-    //             let mut subst = vec![];
-    //             if match_rule_var_subst(kbe, r, *id, &mut subst) {
-    //                 println!(
-    //                     "DBG: Match rule {:?} -> {:?} on node {} ({})",
-    //                     strterm(r),
-    //                     strterm(l),
-    //                     id,
-    //                     strterm(&extract_term(kbe, *id))
-    //                 );
-    //                 // TODO: l_inst could be extract
-    //                 let l_inst = subst_node(kbe, &subst, l);
-    //                 // TODO: the extract and embed is unecessary and expensive!
-    //                 let r_inst = subst_node(kbe, &subst, r);
-    //                 println!(
-    //                     "DBG:   Instantiated: {} -> {:?}",
-    //                     strterm(&r_inst),
-    //                     strterm(&l_inst)
-    //                 );
-    //                 if lpo(&l_inst, &r_inst) {
-    //                     println!("DBG:     Oriented in reverse (not rewrite)");
-    //                     applied.push((id.clone(), false, (l_inst, r_inst)));
-    //                 } else {
-    //                     // let r_inst_cpy = r_inst.clone();
-    //                     applied.push((id.clone(), true, (r_inst, l_inst)));
-
-    //                     // // replace directly (or keep id instead of subst in applied)
-    //                     // let i = resolve_id(kbe, *id).clone();
-    //                     // // we insert the term resulting in id r_id
-    //                     // // then we need to replace the old node
-    //                     // // remove new r_id node, i node and write to i
-    //                     // println!(
-    //                     //     "DBG: Replace node {} with new term {} (previously {})",
-    //                     //     i,
-    //                     //     strterm(&r_inst_cpy),
-    //                     //     strterm(&extract_term(kbe, i))
-    //                     // );
-    //                     // // TODO: r_id might already exist => do not first create but only construct term
-    //                     // let r_id = insert_term(&r_inst_cpy, kbe);
-    //                     // kbe.C.remove_by_left(&i);
-    //                     // assert!(
-    //                     //     !kbe.S.contains_key(&i),
-    //                     //     "Node with id {} already replaced",
-    //                     //     i
-    //                     // );
-    //                     // kbe.S.insert(i, r_id); // keep track of replacement
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    // for (i, should_rewrite, (_,r)) in applied.iter() {
-    //     if !should_rewrite {
-    //         continue;
-    //     }
-    //     // TODO: double replacement
-    //     if (kbe.S.contains_key(i)) {
-    //         // already replaced, skip
-    //         println!("DBG: Node {} already replaced, skipping", i);
-    //         continue;
-    //     }
-    //     // we insert the term resulting in id r_id
-    //     // then we need to replace the old node
-    //     // remove new r_id node, i node and write to i
-    //     println!("DBG: Replace node {} with new term {} (previously {})", i, strterm(&r), strterm(&extract_term(kbe, *i)));
-    //     // TODO: r_id might already exist => do not first create but only construct term
-    //     let r_id = insert_term(&r, kbe);
-    //     kbe.C.remove_by_left(i);
-    //     assert!(!kbe.S.contains_key(i), "Node with id {} already replaced", i);
-    //     kbe.S.insert(*i, r_id); // keep track of replacement
-    // }
-
-    // // both sides => check if right sides matches then add rules to applied
-    // // if both_sides {
-    // //     for (id, node) in kbe.C.iter() {
-    // //         // let applicable = rules.iter().filter(|(_, r)| match_rule_var(kbe, r, node));
-    // //         // applied.extend(applicable.map(|rule| {
-    // //         //     // TODO: clone not necessary
-    // //         //     (id.clone(), rule)
-    // //         // }))
-    // //         for (rule_l, rule_r) in rules.iter() {
-    // //             let mut subst = vec![];
-    // //             if match_rule_var_subst(kbe, rule_r, *id, &mut subst) {
-    // //                 println!("DBG: Rev-Match rule {:?} -> {:?} on node {} ({})", strterm(rule_l), strterm(rule_r), id, strterm(&extract_term(kbe, *id)));
-    // //                 let l_inst = subst_node(kbe, &subst, rule_l);
-    // //                 let r_inst = subst_node(kbe, &subst, rule_r);
-    // //                 println!("DBG:  Instantiated: {} -> {:?}", strterm(&l_inst), strterm(&r_inst));
-    // //                 applied.push((id.clone(), (l_inst, r_inst)));
-    // //             }
-    // //         }
-    // //     }
-    // //     // deduplicate
-    // //     applied.sort_by_key(|(id, _)| id.clone());
-    // //     applied.dedup_by_key(|(id, _)| id.clone());
-    // // }
-
-    // return applied
-    //     .into_iter()
-    //     .map(|(_, _, rule)| {
-    //         rule.clone() // TODO: clone not necessary
-    //     })
-    //     .collect::<Vec<_>>();
 }
 
 fn simplify_dag_var<F>(lpo: &F, kbe: &mut KBEGraph) -> RuleSet
@@ -493,71 +276,8 @@ where
             .collect::<Vec<_>>(),
         true,
     ));
-
-    // let applied = vec![];
-
-    // for (l,r) in kbe.R.iter() {
-    //     for id in kbe.C.left_values() {
-    //         let mut subst = vec![];
-    //         if match_rule_var_subst(kbe, l, id, &mut subst) {
-    //             println!("Match rule {:?} on node {}", strterm(l), id);
-    //             // TODO: the extract and embed is unecessary and expensive!
-    //             let r_inst = subst_node(kbe, &subst, r);
-    //             println!("  Instantiated: {:?}", r_inst);
-    //             applied.push((id, r_inst));
-    //             // // // println!("  Substitution: {:?}", subst);
-    //             // // let r_inst = subst(r, &subst);
-    //             // // // println!("  Instantiated: {:?}", r_inst);
-    //             // let r_id = insert_term(&r_inst, kbe);
-    //             // // println!("  Inserted new term with id {}", r_id);
-    //             // kbe.C.remove_by_left(&id);
-    //             // assert!(!kbe.S.contains_key(&id), "Node with id {} already replaced", id);
-    //             // kbe.S.insert(id, r_id); // keep track of replacement
-    //         }
-    //     }
-    // }
-
-    // for (i, r) in applied.iter() {
-    //     // we insert the term resulting in id r_id
-    //     // then we need to replace the old node
-    //     // remove new r_id node, i node and write to i
-    //     println!("  Replace node {} with new term {} (previously {})", i, strterm(&r), strterm(&extract_term(kbe, *i)));
-    //     // TODO: r_id might already exist => do not first create but only construct term
-    //     let r_id = insert_term(r, kbe);
-    //     kbe.C.remove_by_left(i);
-    //     assert!(!kbe.S.contains_key(i), "Node with id {} already replaced", i);
-    //     kbe.S.insert(*i, r_id); // keep track of replacement
-    // }
-    // panic!("Not implemented yet");
-
-    // let rules = kbe
-    //     .R
-    //     .iter()
-    //     .map(|(l, r)| (l.clone(), r.clone()))
-    //     .flat_map(|(l, r)| instantiate_pair(lpo, &l, &r, ground_instances, true))
-    //     .collect::<Vec<_>>();
-    // new_rules.extend(apply_rules(kbe, &rules, false));
-    // let eq_rules = kbe
-    //     .E
-    //     .iter()
-    //     .map(|(l, r)| (l.clone(), r.clone()))
-    //     .flat_map(|(l, r)| instantiate_pair(lpo, &l, &r, ground_instances, false))
-    //     .collect::<Vec<_>>();
-    // new_rules.extend(apply_rules(kbe, &eq_rules, true));
-
     return new_rules;
 }
-
-// { I(M(x, y)) -> M(I(y), I(x))
-//   M(x, M(I(x), z)) -> z
-//   M(x, I(x)) -> E
-//   I(I(x)) -> x
-//   I(E) -> E
-//   M(x, E) -> x
-//   M(I(x), M(x, z)) -> z
-//   M(M(x, y), z) -> M(x, M(y, z))
-//   M(I(x), x) -> E
-//   M(E, x) -> x }
 
 fn resolve_id(kbe: &KBEGraph, id: Id) -> Id {
     let mut id = id;
@@ -565,30 +285,8 @@ fn resolve_id(kbe: &KBEGraph, id: Id) -> Id {
         id = *real_id;
     }
     id
-    // if let Some(real_id) = kbe.S.get(&id) {
-    //     return *real_id;
-    // }
-    // id
 }
 
-// fn count_symbols(t: &Term) -> HashMap<String, usize> {
-//     let mut counts = HashMap::new();
-//     match t {
-//         Term::Variable(var) => {
-//             *counts.entry(var.0.clone()).or_insert(0) += 1;
-//         }
-//         Term::Function(f, ts) => {
-//             *counts.entry(f.clone()).or_insert(0) += 1;
-//             for t_prime in ts {
-//                 let child_counts = count_symbols(t_prime);
-//                 for (k, v) in child_counts.iter() {
-//                     *counts.entry(k.clone()).or_insert(0) += v;
-//                 }
-//             }
-//         }
-//     }
-//     counts
-// }
 fn count_symbols(t: &Term, map: &mut HashMap<String, usize>) {
     match t {
         Term::Variable(_) => {}
@@ -620,6 +318,28 @@ fn read_equations(path: &str) -> EquationSet {
     .map(|line| parseeq(line))
     .collect()
 }
+
+#[derive(Parser)]
+#[command(name = "kbo_rust")]
+#[command(about = "KBO (Knuth-Bendix Ordering) implementation in Rust")]
+struct Args {
+    /// Rule file path
+    #[arg(short, long, value_name = "RULEFILE")]
+    rules: Option<String>,
+    
+    /// Term file path
+    #[arg(short, long, value_name = "TERMFILE")]
+    term: Option<String>,
+    
+    /// Number of iterations
+    #[arg(short, long, default_value = "30")]
+    iterations: usize,
+    
+    /// Positional arguments for backward compatibility
+    #[arg(value_name = "POSITIONAL")]
+    positional: Vec<String>,
+}
+
 
 fn main() {
     let args = Args::parse();
@@ -679,7 +399,6 @@ fn main() {
                 .join(", ")
         );
     }
-    // panic!();
 
     // compute precedence by occurence count often => higher
     let mut symbol_counts = HashMap::new();
@@ -700,7 +419,6 @@ fn main() {
     let mut sorted_symbols: Vec<_> = symbol_counts.into_iter().collect();
     sorted_symbols.sort_by_key(|(_, count)| (*count as i64)); // sort by count descending
                                                               // sorted_symbols.reverse();
-                                                              // print out count
     println!("Symbol counts:");
     for (symbol, count) in sorted_symbols.iter() {
         println!("  {}: {}", symbol, count);
@@ -708,21 +426,8 @@ fn main() {
     // create precedence from sorted symbols
     let mut pre: Precedence = vec![];
     for (i, (symbol, _)) in sorted_symbols.iter().enumerate() {
-        // println!("  Precedence: {:?}", precedence);
         pre.push((symbol.clone(), i as i32));
-        // pre.push((symbol.clone(), -(i as i32)));
     }
-
-    // let mut pre: Precedence = vec![
-    //     (String::from("M"), 1),
-    //     (String::from("E"), 2),
-    //     (String::from("I"), 3),
-
-    //     // for test term
-    //     (String::from("A"), 0),
-    //     (String::from("B"), 0),
-    //     (String::from("C"), 0),
-    // ];
 
     pre.sort_by_key(|(_, count)| *count as i64);
     println!("Final precedence:");
@@ -730,18 +435,8 @@ fn main() {
         println!("  {}: {}", symbol, count);
     }
 
-    // panic!();
     // Step 0 (define precedence)
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
-
-    // let pre: Precedence = vec![
-    //     (String::from("I"), 3),
-    //     (String::from("M"), 1),
-    //     (String::from("E"), 2),
-    //     (String::from("A"), 0), // e.g. for test term
-    //     (String::from("B"), 0), // e.g. for test term
-    // ];
-    // let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
     kbe.R = vec![];
     let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
@@ -759,10 +454,7 @@ fn main() {
     println!("{}", strterm(&t_prime));
 
     // Step 3 (loop)
-    // for i in 0..100 {
     for i in 0..args.iterations {
-    // for i in 0..6 {
-    // for i in 0..8 {
         println!();
         println!();
         println!("Iteration {}", i);
@@ -790,14 +482,6 @@ fn main() {
         // let ground_instances = ground_instances(&kbe);
         let mut instances: HashSet<Term> = HashSet::new();
         let mut visited: HashMap<ENode, Term> = HashMap::new();
-        // for (_, enode) in kbe.C.iter() {
-        //     // b
-        //     let _ = ground_instances(&mut visited, &mut instances, enode, &kbe);
-        // }
-        // println!("Number of ground instances: {}", instances.len());
-        // for t in instances.iter() {
-        //     println!("  {}", strterm(t));
-        // }
         // assert that all rules in R are oriented according to the lpo
         for rule in kbe.R.iter() {
             let (l, r) = rule;
@@ -813,12 +497,9 @@ fn main() {
         // is from E already onriented/grounded is oriented
 
         println!("Simplify DAG.");
-        // // rules + ->eq + <-eq
-        // let new_rules = simplify_dag(&lpo, &mut kbe, &instances);
         let new_rules = simplify_dag_var(&lpo, &mut kbe);
         println!("New rules:");
         printrules(&new_rules);
-        // kbe.R.extend(new_rules);
         kbe.E.extend(new_rules);
 
         // Step 3.2 (KBO: Add critical pairs)
@@ -860,7 +541,6 @@ fn main() {
                 if simpl_cp.is_empty() {
                     continue;
                 }
-                // println!("DBG: Critical pair: {} -> {} with {} -> {}", strterm(&rule1.0), strterm(&rule1.1), strterm(&rule2.0), strterm(&rule2.1));
                 for (simpl_l, simpl_r) in simpl_cp.iter() {
                     println!(
                         "DBG:  Simplified critical pair: {} = {}",
@@ -947,17 +627,6 @@ fn main() {
         }
         // TODO: not clone
         kbe.E.extend(top_cps);
-
-        // counted_cps.iter().take(5).for_each(|(cp, _)| {
-        //     let (l, r) = cp;
-        //     kbe.E.push((l.clone(), r.clone()));
-        // });
-        // let top_cps = counted_cps.iter().take(5).map(|(cp, _)| cp.clone()).collect::<Vec<_>>();
-        // kbe.E.extend(top_cps);
-        // println!("Top 5 critical pairs:");
-        // for (l, r) in top_cps.iter() {
-        //     println!("  {} -> {}", strterm(l), strterm(r));
-        // }
 
         // kbo faster because only considers relevant critical pairs
         let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
