@@ -221,11 +221,17 @@ where
                 // TODO: the extract and embed is unecessary and expensive!
                 let r_inst = subst_node(kbe, &subst, r);
 
-                if lpo(&r_inst, &l_inst) {
-                    applied.push((r_inst, l_inst));
-                } else {
+                // if lpo(&r_inst, &l_inst) {
+                //     applied.push((r_inst, l_inst));
+                // } else {
+                //     rewrites.push((id, r_inst.clone()));
+                //     applied.push((l_inst, r_inst));
+                // }
+                if lpo(&l_inst, &r_inst) {
                     rewrites.push((id, r_inst.clone()));
                     applied.push((l_inst, r_inst));
+                }else {
+                    applied.push((r_inst, l_inst));
                 }
             }
         }
@@ -240,6 +246,7 @@ where
                 strterm(&r),
                 strterm(&extract_term(kbe, id))
             );
+            debug_assert!(lpo(&extract_term(kbe, id), &r));
             if already_replaced.contains(&id) {
                 #[cfg(debug_assertions)]
                 println!("DBG: Node {} already replaced, skipping", id);

@@ -1,0 +1,1 @@
+Mul(Pow(F, G), Add(Mul(D(X, F), Div(G, F)), Mul(D(X, G), Ln(F))))

@@ -1,0 +1,1 @@
+Mul(Pow(Add(A, Mul(MinusOne, One)), Add(A, Two)), Add(Mul(D(A, Add(A, Mul(MinusOne, One))), Div(Add(A, Two), Add(A, Mul(MinusOne, One)))), Mul(D(A, Add(A, Two)), Ln(Add(A, Mul(MinusOne, One))))))
