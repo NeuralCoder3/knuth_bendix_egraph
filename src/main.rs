@@ -12,7 +12,6 @@ use crate::kbo::*;
 use crate::term_rewrite::*;
 use crate::types::*;
 
-
 fn knuth_steps<F>(verbose: bool, lpo: &F, state: &(RuleSet, EquationSet)) -> (RuleSet, EquationSet)
 where
     F: Fn(&Term, &Term) -> bool,
@@ -169,7 +168,6 @@ pub fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
     }
 }
 
-
 fn apply_rules_var<F>(
     lpo: &F,
     kbe: &mut KBEGraph,
@@ -181,9 +179,9 @@ where
 {
     let mut applied = vec![];
 
-
     let rules = if both_sides {
-        rules.iter()
+        rules
+            .iter()
             .flat_map(|(l, r)| {
                 vec![
                     (l.clone(), r.clone()), // add original rule
@@ -192,7 +190,8 @@ where
             })
             .collect::<RuleSet>()
     } else {
-        rules.iter()
+        rules
+            .iter()
             .map(|(l, r)| (l.clone(), r.clone()))
             .collect::<RuleSet>()
     };
@@ -209,6 +208,7 @@ where
         for id in ids {
             let mut subst = vec![];
             if match_rule_var_subst(kbe, l, id, &mut subst) {
+                #[cfg(debug_assertions)]
                 println!(
                     "DBG: Match rule {:?} -> {:?} on node {} ({})",
                     strterm(l),
@@ -233,8 +233,15 @@ where
         // To avoid overlapping rewrites:
         let mut already_replaced = std::collections::HashSet::new();
         for (id, r) in rewrites {
-            println!("DBG: Replace node {} with new term {} (previously {})", id, strterm(&r), strterm(&extract_term(kbe, id)));
+            #[cfg(debug_assertions)]
+            println!(
+                "DBG: Replace node {} with new term {} (previously {})",
+                id,
+                strterm(&r),
+                strterm(&extract_term(kbe, id))
+            );
             if already_replaced.contains(&id) {
+                #[cfg(debug_assertions)]
                 println!("DBG: Node {} already replaced, skipping", id);
                 continue; // skip if already replaced in this batch
             }
@@ -244,7 +251,11 @@ where
             // TODO: r_id might already exist => do not first create but only construct term
             let r_id = insert_term(&r, kbe);
             kbe.C.remove_by_left(&id);
-            assert!(!kbe.S.contains_key(&id), "Node with id {} already replaced", id);
+            debug_assert!(
+                !kbe.S.contains_key(&id),
+                "Node with id {} already replaced",
+                id
+            );
             kbe.S.insert(id, r_id);
             already_replaced.insert(id);
         }
@@ -258,14 +269,14 @@ where
 {
     let mut new_rules = vec![];
 
-    new_rules.extend(
-        apply_rules_var(
-            lpo,
-            kbe,
-            &kbe.R.iter()
-                .map(|(l, r)| (l.clone(), r.clone()))
-                .collect::<Vec<_>>(),
-            false
+    new_rules.extend(apply_rules_var(
+        lpo,
+        kbe,
+        &kbe.R
+            .iter()
+            .map(|(l, r)| (l.clone(), r.clone()))
+            .collect::<Vec<_>>(),
+        false,
     ));
     new_rules.extend(apply_rules_var(
         lpo,
@@ -311,12 +322,12 @@ fn term_contains(t: &Term, subterm: &Term) -> bool {
 
 fn read_equations(path: &str) -> EquationSet {
     std::fs::read_to_string(path)
-    .unwrap()
-    .lines()
-    .map(|line| line.trim())
-    .filter(|line| !line.is_empty() && !line.starts_with("//"))
-    .map(|line| parseeq(line))
-    .collect()
+        .unwrap()
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty() && !line.starts_with("//"))
+        .map(|line| parseeq(line))
+        .collect()
 }
 
 #[derive(Parser)]
@@ -326,24 +337,23 @@ struct Args {
     /// Rule file path
     #[arg(short, long, value_name = "RULEFILE")]
     rules: Option<String>,
-    
+
     /// Term file path
     #[arg(short, long, value_name = "TERMFILE")]
     term: Option<String>,
-    
+
     /// Number of iterations
     #[arg(short, long, default_value = "30")]
     iterations: usize,
-    
+
     /// Positional arguments for backward compatibility
     #[arg(value_name = "POSITIONAL")]
     positional: Vec<String>,
 }
 
-
 fn main() {
     let args = Args::parse();
-    
+
     let mut kbe = KBEGraph {
         C: BiMap::new(),
         id_count: 0,
@@ -358,7 +368,9 @@ fn main() {
     } else if !args.positional.is_empty() {
         args.positional[0].clone()
     } else {
-        eprintln!("Error: No rule file provided. Use --rules/-r or provide as first positional argument.");
+        eprintln!(
+            "Error: No rule file provided. Use --rules/-r or provide as first positional argument."
+        );
         std::process::exit(1);
     };
 
@@ -368,13 +380,15 @@ fn main() {
     } else if args.positional.len() > 1 {
         args.positional[1].clone()
     } else {
-        eprintln!("Error: No term provided. Use --term/-t or provide as second positional argument.");
+        eprintln!(
+            "Error: No term provided. Use --term/-t or provide as second positional argument."
+        );
         std::process::exit(1);
     };
 
     // Load equations from rule file
     kbe.E = read_equations(&rule_path);
-    
+
     // Parse term
     let t = if std::path::Path::new(&term_arg).is_file() {
         parseterm(&std::fs::read_to_string(&term_arg).unwrap())
@@ -385,6 +399,7 @@ fn main() {
     let t_id = insert_term(&t, &mut kbe);
     let mut ids = kbe.C.left_values().cloned().collect::<Vec<_>>();
     ids.sort();
+    #[cfg(debug_assertions)]
     for id in ids.iter() {
         let node = kbe.C.get_by_left(id).unwrap();
         println!(
@@ -419,7 +434,9 @@ fn main() {
     let mut sorted_symbols: Vec<_> = symbol_counts.into_iter().collect();
     sorted_symbols.sort_by_key(|(_, count)| (*count as i64)); // sort by count descending
                                                               // sorted_symbols.reverse();
+    #[cfg(debug_assertions)]
     println!("Symbol counts:");
+    #[cfg(debug_assertions)]
     for (symbol, count) in sorted_symbols.iter() {
         println!("  {}: {}", symbol, count);
     }
@@ -430,7 +447,9 @@ fn main() {
     }
 
     pre.sort_by_key(|(_, count)| *count as i64);
+    #[cfg(debug_assertions)]
     println!("Final precedence:");
+    #[cfg(debug_assertions)]
     for (symbol, count) in pre.iter() {
         println!("  {}: {}", symbol, count);
     }
@@ -458,9 +477,11 @@ fn main() {
         println!();
         println!();
         println!("Iteration {}", i);
+        #[cfg(debug_assertions)]
         println!("DAG:");
         let mut ids = kbe.C.left_values().cloned().collect::<Vec<_>>();
         ids.sort();
+        #[cfg(debug_assertions)]
         for id in ids.iter() {
             let node = kbe.C.get_by_left(id).unwrap();
             println!(
@@ -483,6 +504,7 @@ fn main() {
         let mut instances: HashSet<Term> = HashSet::new();
         let mut visited: HashMap<ENode, Term> = HashMap::new();
         // assert that all rules in R are oriented according to the lpo
+        #[cfg(debug_assertions)]
         for rule in kbe.R.iter() {
             let (l, r) = rule;
             if !lpo(l, r) {
@@ -496,9 +518,12 @@ fn main() {
 
         // is from E already onriented/grounded is oriented
 
+        #[cfg(debug_assertions)]
         println!("Simplify DAG.");
-        let new_rules = simplify_dag_var(&lpo, &mut kbe);
+        let new_rules = simplify_dag_var(&lpo, &mut kbe); 
+        #[cfg(debug_assertions)]
         println!("New rules:");
+        #[cfg(debug_assertions)]
         printrules(&new_rules);
         kbe.E.extend(new_rules);
 
@@ -510,6 +535,7 @@ fn main() {
                 if i > j {
                     continue; // only consider pairs once
                 }
+                #[cfg(debug_assertions)]
                 println!(
                     "DBG: Critical pair: {} -> {} with {} -> {}",
                     strterm(&rule1.0),
@@ -518,6 +544,7 @@ fn main() {
                     strterm(&rule2.1)
                 );
                 let cp = critical_pair(rule1, rule2);
+                #[cfg(debug_assertions)]
                 for (c_l, c_r) in cp.iter() {
                     println!(
                         "DBG:   OrgCritical pair: {} = {}",
@@ -541,6 +568,7 @@ fn main() {
                 if simpl_cp.is_empty() {
                     continue;
                 }
+                #[cfg(debug_assertions)]
                 for (simpl_l, simpl_r) in simpl_cp.iter() {
                     println!(
                         "DBG:  Simplified critical pair: {} = {}",
@@ -551,6 +579,7 @@ fn main() {
                 cps.extend(simpl_cp);
             }
         }
+        #[cfg(debug_assertions)]
         println!("Computed {} critical pairs", cps.len());
         // TODO: only add some critical pairs (ematch or grounded (how many from R are subsumed))
         // kbe.E.extend(cps);
@@ -621,7 +650,9 @@ fn main() {
             .map(|(cp, _, _, _)| cp.clone())
             .collect::<Vec<_>>();
         // let top_cps = counted_cps.into_iter().map(|(cp, _, _, _)| cp.clone()).collect::<Vec<_>>();
+        #[cfg(debug_assertions)]
         println!("Top 5 critical pairs:");
+        #[cfg(debug_assertions)]
         for (l, r) in top_cps.iter() {
             println!("  {} = {}", strterm(l), strterm(r));
         }
