@@ -4,6 +4,7 @@ mod types;
 mod util;
 
 use bimap::BiMap;
+use clap::Parser;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
@@ -14,6 +15,27 @@ use term_rewrite::parseeqs;
 use crate::kbo::*;
 use crate::term_rewrite::*;
 use crate::types::*;
+
+#[derive(Parser)]
+#[command(name = "kbo_rust")]
+#[command(about = "KBO (Knuth-Bendix Ordering) implementation in Rust")]
+struct Args {
+    /// Rule file path
+    #[arg(short, long, value_name = "RULEFILE")]
+    rules: Option<String>,
+    
+    /// Term file path
+    #[arg(short, long, value_name = "TERMFILE")]
+    term: Option<String>,
+    
+    /// Number of iterations
+    #[arg(short, long, default_value = "30")]
+    iterations: usize,
+    
+    /// Positional arguments for backward compatibility
+    #[arg(value_name = "POSITIONAL")]
+    positional: Vec<String>,
+}
 
 fn knuth_steps<F>(verbose: bool, lpo: &F, state: &(RuleSet, EquationSet)) -> (RuleSet, EquationSet)
 where
@@ -261,6 +283,8 @@ where
 
         let mut rewrites = vec![];
         // println!("DBG: Apply rules {:?} -> {:?}", strterm(l), strterm(r));
+
+        // TODO: we can not invent variables
 
         for id in ids {
             let mut subst = vec![];
@@ -587,7 +611,19 @@ fn term_contains(t: &Term, subterm: &Term) -> bool {
     }
 }
 
+fn read_equations(path: &str) -> EquationSet {
+    std::fs::read_to_string(path)
+    .unwrap()
+    .lines()
+    .map(|line| line.trim())
+    .filter(|line| !line.is_empty() && !line.starts_with("//"))
+    .map(|line| parseeq(line))
+    .collect()
+}
+
 fn main() {
+    let args = Args::parse();
+    
     let mut kbe = KBEGraph {
         C: BiMap::new(),
         id_count: 0,
@@ -596,138 +632,35 @@ fn main() {
         S: HashMap::new(),
     };
 
-    // // Step 0 (define precedence)
-    // let pre: Precedence = vec![
-    //     (String::from("M"), 1),
-    //     (String::from("E"), 2),
-    //     (String::from("I"), 3),
-    //     (String::from("A"), 0), // e.g. for test term
-    //     (String::from("B"), 0), // e.g. for test term
-    // ];
-    // let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
+    // Determine rule file path
+    let rule_path = if let Some(path) = args.rules {
+        path
+    } else if !args.positional.is_empty() {
+        args.positional[0].clone()
+    } else {
+        eprintln!("Error: No rule file provided. Use --rules/-r or provide as first positional argument.");
+        std::process::exit(1);
+    };
 
-    // // Step 1 (build KBE graph)
+    // Determine term file/path
+    let term_arg = if let Some(term) = args.term {
+        term
+    } else if args.positional.len() > 1 {
+        args.positional[1].clone()
+    } else {
+        eprintln!("Error: No term provided. Use --term/-t or provide as second positional argument.");
+        std::process::exit(1);
+    };
 
-    // // let t = parseterm("M(I(M(y,M(x, M(I(x), I(y))))),z)"); // -> z
-    // // let t = parseterm("M(I(M(b,M(a, M(I(a), I(b))))),c)"); // -> c
-    // // let t = parseterm("M(I(x), M(x, z))"); // -> z
-    // let t = parseterm("M(I(A), M(A, B))"); // -> B
-    // let t_id = insert_term(&t, &mut kbe);
-
-    // // Step 2 (orient rules in initial KBO step)
-    // kbe.E = parseeqs(vec!["M(M(x,y),z)=M(x,M(y,z))", "M(I(x),x)=E", "M(E,x)=x"]);
-    // let t = parseterm("M(I(A), M(A, B))"); // -> B
-
-    // Step 1 (build KBE graph)
-
-    // Step 2 (orient rules in initial KBO step)
-    //     kbe.E = parseeqs(
-    //         vec![
-    // "f=App(App(B,f),I)", // eta-expansion
-    // "App(App(App(B,x),y),z)=App(x,App(y,z))", // reduce-B
-    // "App(App(App(R,x),y),z)=App(App(y,z),x)", // reduce-R
-    // "App(App(App(S,x),y),z)=App(App(x,z),App(y,z))", // reduce-S
-    // "App(I,x)=x", // reduce-I
-    // "App(App(K,x),y)=x", // reduce-K
-    // "App(App(App(C,x),y),z)=App(App(x,z),y)", // reduce-C
-    // "App(x,App(y,z))=App(App(App(B,x),y),z)", // reduce-B-inv
-    // "App(App(y,z),x)=App(App(App(R,x),y),z)", // reduce-R-inv
-    // "App(App(x,z),App(y,z))=App(App(App(S,x),y),z)", // reduce-S-inv
-    // "App(App(x,z),y)=App(App(App(C,x),y),z)", // reduce-C-inv
-    // "App(App(B,S),K)=B", // char-B-1
-    // "App(S,App(K,x))=App(B,x)", // char-B-2
-    // "App(C,C)=R", // char-R-1
-    // "App(App(B,B),App(C,I))=R", // char-R-2
-    // "App(B,App(App(C,I),x))=App(R,x)", // char-R-3
-    // "App(B,I)=I", // char-I-1
-    // "App(App(S,K),x)=I", // char-I-2
-    // "App(C,App(K,I))=K", // char-K-1
-    // "App(App(C,App(App(B,B),S)),K)=C", // char-C-1
-    // "App(App(B,App(S,x)),K)=App(C,x)", // char-C-2
-    // "App(App(C,App(App(B,B),S)),K)=C", // char-C-3
-    // "App(App(S,x),App(K,y))=App(App(C,x),y)", // char-C-4
-    // "B=App(App(B,S),K)", // char-B-1-inv
-    // "App(B,x)=App(S,App(K,x))", // char-B-2-inv
-    // "R=App(C,C)", // char-R-1-inv
-    // "R=App(App(B,B),App(C,I))", // char-R-2-inv
-    // "App(R,x)=App(B,App(App(C,I),x))", // char-R-3-inv
-    // "I=App(B,I)", // char-I-1-inv
-    // "K=App(C,App(K,I))", // char-K-1-inv
-    // "C=App(App(C,App(App(B,B),S)),K)", // char-C-1-inv
-    // "App(C,x)=App(App(B,App(S,x)),K)", // char-C-2-inv
-    // "C=App(App(C,App(App(B,B),S)),K)", // char-C-3-inv
-    // "App(App(C,x),y)=App(App(S,x),App(K,y))", // char-C-4-inv
-    // "App(App(B,App(App(B,x),y)),z)=App(App(B,x),App(App(B,y),z))", // assoc-B-1
-    // "App(App(B,x),App(App(B,y),z))=App(App(B,App(App(B,x),y)),z)", // assoc-B-2
-
-    // // "App(App(map,f),nil)=nil", // map-nil (commented out)
-    // // "App(App(map,f),App(App(cons,x),xs))=App(App(cons,App(f,x)),App(App(map,f),xs))", // map-cons (commented out)
-    // // "App(isnil,nil)=true", // isnil-nil (commented out)
-    // // "App(isnil,App(App(cons,x),xs))=false", // isnil-cons (commented out)
-    // // "App(App(Add,f),0)=f", // Add-neutral-1 (commented out)
-    // "App(App(Add,0),f)=f", // Add-neutral-2
-    // "App(App(R,0),Add)=I", // Add-neutral-3
-    // "App(App(Add,f),App(Neg,f))=0", // Add-inverse-1
-    // "App(App(Add,App(Neg,f)),f)=0", // Add-inverse-2
-    // "App(App(S,Add),Neg)=0", // Add-inverse-3
-    // "App(App(Add,App(App(Add,f),g)),h)=App(App(Add,f),App(App(Add,g),h))", // Add-comm-1
-    // "App(App(Add,f),App(App(Add,g),h))=App(App(Add,App(App(Add,f),g)),h)", // Add-comm-2
-    // "App(C,Add)=Add", // Add-comm-3
-    // "Add=App(C,Add)", // Add-comm-4
-    // "App(App(Add,App(App(Add,f),g)),h)=App(App(Add,f),App(App(Add,g),h))", // Add-assoc-1
-    // "App(App(Add,f),App(App(Add,g),h))=App(App(Add,App(App(Add,f),g)),h)", // Add-assoc-2
-    // "App(App(Add,App(App(mul,a),b)),App(App(mul,a),c))=App(App(mul,a),App(App(Add,b),c))", // distr-l-1
-    // "App(App(S,App(App(B,C),App(App(B,App(B,B)),App(App(B,App(B,Add)),mul)))),mul)=App(App(R,Add),App(App(B,B),App(App(B,B),mul)))", // distr-l-2
-    // "App(App(B,Neg),Neg)=I", // double-neg
-    //         ]
-    //     );
-
-    //     // \\ c b. (add (mul c b) (mul c (neg b)))
-    //     //  (app (app S (app (app B S) (app (app B (app B add)) mul))) (app (app R neg) (app (app B B) mul)))
-    //     let t = parseterm("App(App(S, App(App(B, S), App(App(B, App(B, Add)), Mul))), App(App(R, Neg), App(App(B, B), Mul)))"); // -> 0
-
-    // https://homepage.divms.uiowa.edu/~astump/papers/stump_loechner06.pdf
-    // https://cs.bc.edu/stumpaa/papers/thesis-wehrman.pdf
-    kbe.E = parseeqs(vec![
-        // Group (Figure 3-1/3-2, page 25)
-        // "Mul(One, x) = One",
-        // "Mul(Mul(x, y), z) = Mul(x, Mul(y, z))",
-        // "Mul(Inv(x), x) = One",
-        "M(E, x) = x",
-        "M(M(x, y), z) = M(x, M(y, z))",
-        "M(I(x), x) = E",
-        // One Group Endomorphism (Figure 7-1/7-2, page 51)
-        "F(M(x, y)) = M(F(x), F(y))",
-        // Two Commuting Endomorphisms (Figure 7-5/7-6, page 53)
-        "G(M(x, y)) = M(G(x), G(y))",
-        "M(F(x), G(y)) = M(G(y), F(x))",
-        // Three Commuting Endomorphisms (https://github.com/iwehrman/Slothrop/blob/master/tests/cge3.tptp)
-        "H(M(x, y)) = M(H(x), H(y))",
-        "M(F(x), H(y)) = M(H(y), F(x))",
-        "M(G(x), H(y)) = M(H(y), G(x))",
-        // abelian group
-        // "M(x, y) = M(y, x)", // commutativity
-                             // "M(I(x), M(y, x)) = M(I(y), M(x, y))", // inverse
-    ]);
-    // let t = parseterm("Mul(A, Mul(Inv(A), Mul(Mul(B, C), Mul(Inv(C), Inv(B)))))"); // -> One
-    // let t = parseterm("M(A, M(I(A), M(M(B, C), M(I(C), I(B)))))"); // -> One
-    // let t = parseterm("M(A, M(I(A), B))"); // -> One
-    // let t = parseterm("M(A, I(A))"); // -> One
-    // let t = parseterm("M(I(A), M(M(G(A), G(M(A, I(A)))), M(F(A), M(F(A), I(A)))))");
-    // let t = parseterm("M(F(A), M(F(I(A)), M(F(B), G(C))))");
-    // let t = parseterm("M(F(A), F(I(A)))");
-    // let t = parseterm("F(M(A, I(A)))");
-    // let t = parseterm("I(G(I(A)))");  // G(A)
-    // let t = parseterm("I(M(I(F(I(X))),F(I(X))))"); // E
-    // g(b) * f(i(a)) * g(i(b))
-    // let t = parseterm("M(G(B), M(G(I(B)), F(I(A))))"); // I(F(A)) works
-
-    // TODO: it pulls the I outside and can't rewrite the f*g
-    // let t = parseterm("M(G(B), M(F(I(A)), G(I(B))))"); // -> F(I(A))
-    let t = parseterm("M(G(I(B)), M(F(A), G(B)))"); // -> F(A) works; needs 6 iterations without R, 8 with R
-    // let t = parseterm("M(I(B), M(A, B))"); // -> nothing (no abelian group)
-    // let t = parseterm("M(F(I(A)), M(F(B), F(A)))"); // -> F(B) (only in abelian group)
-    // let t = parseterm("M(I(A), M(B, A))"); // -> B (only in abelian group)
+    // Load equations from rule file
+    kbe.E = read_equations(&rule_path);
+    
+    // Parse term
+    let t = if std::path::Path::new(&term_arg).is_file() {
+        parseterm(&std::fs::read_to_string(&term_arg).unwrap())
+    } else {
+        parseterm(&term_arg)
+    };
 
     let t_id = insert_term(&t, &mut kbe);
     let mut ids = kbe.C.left_values().cloned().collect::<Vec<_>>();
@@ -827,7 +760,7 @@ fn main() {
 
     // Step 3 (loop)
     // for i in 0..100 {
-    for i in 0..30 {
+    for i in 0..args.iterations {
     // for i in 0..6 {
     // for i in 0..8 {
         println!();
