@@ -7,6 +7,8 @@ use bimap::BiMap;
 use clap::Parser;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::io::stdout;
+use std::io::Write;
 
 use crate::kbo::*;
 use crate::term_rewrite::*;
@@ -201,11 +203,14 @@ where
         let ids = kbe.C.iter().map(|(id, _)| (id.clone()));
 
         let mut rewrites = vec![];
-        // println!("DBG: Apply rules {:?} -> {:?}", strterm(l), strterm(r));
+        #[cfg(debug_assertions)]
+        { println!("DBG2: Apply rules {:?} -> {:?}", strterm(l), strterm(r)); stdout().flush().unwrap(); }
 
         // TODO: we can not invent variables
 
         for id in ids {
+            #[cfg(debug_assertions)] { println!("DBG2: Check Id {:?}", id); stdout().flush().unwrap(); }
+
             let mut subst = vec![];
             if match_rule_var_subst(kbe, l, id, &mut subst) {
                 #[cfg(debug_assertions)]
@@ -216,10 +221,17 @@ where
                     id,
                     strterm(&extract_term(kbe, id))
                 );
+
+
+            #[cfg(debug_assertions)] { println!("DBG2: Subst l"); stdout().flush().unwrap(); }
                 // TODO: l_inst could be extract
                 let l_inst = subst_node(kbe, &subst, l);
                 // TODO: the extract and embed is unecessary and expensive!
+            #[cfg(debug_assertions)] { println!("DBG2: Subst r"); stdout().flush().unwrap(); }
                 let r_inst = subst_node(kbe, &subst, r);
+            #[cfg(debug_assertions)] { println!("DBG2: Substed: {:?} -> {:?}", strterm(&l_inst), strterm(&r_inst)); stdout().flush().unwrap(); }
+
+                debug_assert!(extract_term(kbe, id) == l_inst);
 
                 // if lpo(&r_inst, &l_inst) {
                 //     applied.push((r_inst, l_inst));
@@ -227,12 +239,15 @@ where
                 //     rewrites.push((id, r_inst.clone()));
                 //     applied.push((l_inst, r_inst));
                 // }
+                // TODO: lpo is bottleneck
                 if lpo(&l_inst, &r_inst) {
+            #[cfg(debug_assertions)] { println!("Before Clone"); stdout().flush().unwrap(); }
                     rewrites.push((id, r_inst.clone()));
                     applied.push((l_inst, r_inst));
                 }else {
                     applied.push((r_inst, l_inst));
                 }
+            #[cfg(debug_assertions)] { println!("DBG2: After If"); stdout().flush().unwrap(); }
             }
         }
 
@@ -246,7 +261,9 @@ where
                 strterm(&r),
                 strterm(&extract_term(kbe, id))
             );
-            debug_assert!(lpo(&extract_term(kbe, id), &r));
+
+            // TODO: subterm might be replaced => might not be smaller anymore            
+            // debug_assert!(lpo(&extract_term(kbe, id), &r));
             if already_replaced.contains(&id) {
                 #[cfg(debug_assertions)]
                 println!("DBG: Node {} already replaced, skipping", id);
@@ -276,6 +293,8 @@ where
 {
     let mut new_rules = vec![];
 
+    #[cfg(debug_assertions)]
+    println!("Apply R-rules");
     new_rules.extend(apply_rules_var(
         lpo,
         kbe,
@@ -285,6 +304,8 @@ where
             .collect::<Vec<_>>(),
         false,
     ));
+    #[cfg(debug_assertions)]
+    println!("Apply E-rules");
     new_rules.extend(apply_rules_var(
         lpo,
         kbe,
@@ -305,11 +326,17 @@ fn resolve_id(kbe: &KBEGraph, id: Id) -> Id {
     id
 }
 
-fn count_symbols(t: &Term, map: &mut HashMap<String, usize>) {
+#[derive(Default)]
+struct SymbolCount {
+    arity: usize,
+    count: usize,
+}
+
+fn count_symbols(t: &Term, map: &mut HashMap<String, SymbolCount>) {
     match t {
         Term::Variable(_) => {}
         Term::Function(f, ts) => {
-            *map.entry(f.clone()).or_insert(0) += 1;
+            map.entry(f.clone()).or_insert(SymbolCount { arity: ts.len(), count: 0 }).count += 1;
             for t_prime in ts {
                 count_symbols(t_prime, map);
             }
@@ -427,7 +454,8 @@ fn main() {
     count_symbols(&t, &mut symbol_counts);
     // set each to zero
     for (symbol, count) in symbol_counts.iter_mut() {
-        *count = 0; // reset counts
+        // *count = 0; // reset counts
+        count.count = 0;
     }
     for eqs in kbe.E.iter() {
         count_symbols(&eqs.0, &mut symbol_counts);
@@ -439,13 +467,13 @@ fn main() {
     }
     // sort by count descending
     let mut sorted_symbols: Vec<_> = symbol_counts.into_iter().collect();
-    sorted_symbols.sort_by_key(|(_, count)| (*count as i64)); // sort by count descending
-                                                              // sorted_symbols.reverse();
+    sorted_symbols.sort_by_key(|(_, count)| ((count.count as i64) + 100*(count.arity as i64))); // sort by count descending
+    // sorted_symbols.reverse();
     #[cfg(debug_assertions)]
     println!("Symbol counts:");
     #[cfg(debug_assertions)]
     for (symbol, count) in sorted_symbols.iter() {
-        println!("  {}: {}", symbol, count);
+        println!("  {}: {} ({})", symbol, count.count, count.arity);
     }
     // create precedence from sorted symbols
     let mut pre: Precedence = vec![];
@@ -453,7 +481,7 @@ fn main() {
         pre.push((symbol.clone(), i as i32));
     }
 
-    pre.sort_by_key(|(_, count)| *count as i64);
+    // pre.sort_by_key(|(_, count)| *count as i64);
     #[cfg(debug_assertions)]
     println!("Final precedence:");
     #[cfg(debug_assertions)]

@@ -8,6 +8,7 @@ default-run = "main"
 [dependencies]
 bimap = "0.6.3"
 clap = { version = "4.0", features = ["derive"] }
+memoize = "0.5.1"
 
 [[bin]]
 name = "main"
