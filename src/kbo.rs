@@ -1,13 +1,26 @@
 use std::cmp;
 use std::error::Error;
 use std::fmt;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 
-use memoize::memoize;
+
 use term_rewrite::uniquevar;
 
 use crate::term_rewrite;
 use crate::term_rewrite::*;
 use crate::types::*;
+
+/// Simple memoization cache for LPO computations
+static LPO_CACHE: Lazy<Mutex<HashMap<(Term, Term), bool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// Clears the LPO cache to free memory
+pub fn clear_lpo_cache() {
+    if let Ok(mut cache) = LPO_CACHE.lock() {
+        cache.clear();
+    }
+}
 
 /// Error type indicating that completion failed.
 #[derive(Debug)]
@@ -245,7 +258,16 @@ where
 /// The lexicographic path ordering (LPO) “greater–or–equal” relation with respect to `pre`.
 /// TODO: too expensive to compute
 fn lpo_ge(pre: &Precedence, t: &Term, t_prime: &Term) -> bool {
-    match (t, t_prime) {
+    // Check cache first
+    let key = (t.clone(), t_prime.clone());
+    if let Ok(cache) = LPO_CACHE.lock() {
+        if let Some(&result) = cache.get(&key) {
+            return result;
+        }
+    }
+    
+    // Compute the result
+    let result = match (t, t_prime) {
         (_, Term::Variable(var_prime)) => vars(t).contains(var_prime),
         (Term::Variable(_), _) => false,
         (Term::Function(f, ts), Term::Function(f_prime, ts_prime)) => {
@@ -270,7 +292,14 @@ symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp)
             // let option3 = ts.iter().any(|tpp| lpo_ge(pre, tpp, t_prime));
             // option1 || option2 || option3
         }
+    };
+    
+    // Store result in cache
+    if let Ok(mut cache) = LPO_CACHE.lock() {
+        cache.insert(key, result);
     }
+    
+    result
 }
 
 /// The strict part of `lpo_ge`.
