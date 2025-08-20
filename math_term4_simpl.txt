@@ -1,0 +1,4 @@
+Div(Zero, A)
+Mul(Zero, Pow(A, MinusOne))
+Mul(Pow(A, MinusOne), Zero)
+Zero

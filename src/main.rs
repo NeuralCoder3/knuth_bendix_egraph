@@ -304,6 +304,17 @@ where
             .collect::<Vec<_>>(),
         false,
     ));
+    // #[cfg(debug_assertions)]
+    // println!("Apply R-rules inverse");
+    // new_rules.extend(apply_rules_var(
+    //     lpo,
+    //     kbe,
+    //     &kbe.R
+    //         .iter()
+    //         .map(|(l, r)| (r.clone(), l.clone()))
+    //         .collect::<Vec<_>>(),
+    //     false,
+    // ));
     #[cfg(debug_assertions)]
     println!("Apply E-rules");
     new_rules.extend(apply_rules_var(
@@ -475,6 +486,15 @@ fn main() {
     for (symbol, count) in sorted_symbols.iter() {
         println!("  {}: {} ({})", symbol, count.count, count.arity);
     }
+    // let sorted_symbols = vec![
+    //     "Zero",
+    //     "MinusOne",
+    //     "A",
+    //     "Mul",
+    //     "Pow",
+    //     "Div",
+    // ].into_iter().map(|s| (s.to_string(), 0)).collect::<Vec<_>>();
+
     // create precedence from sorted symbols
     let mut pre: Precedence = vec![];
     for (i, (symbol, _)) in sorted_symbols.iter().enumerate() {
@@ -560,13 +580,24 @@ fn main() {
         println!("New rules:");
         #[cfg(debug_assertions)]
         printrules(&new_rules);
-        kbe.E.extend(new_rules);
+        // kbe.E.extend(new_rules);
+        kbe.R.extend(new_rules);
 
         // Step 3.2 (KBO: Add critical pairs)
         // TODO: keep previous critical pairs instead of complete recomputation
         let mut cps = vec![];
-        for (i, rule1) in kbe.R.iter().enumerate() {
-            for (j, rule2) in kbe.R.iter().enumerate() {
+
+        {
+            let rules = kbe.R.clone();
+        // let rules = kbe.R.iter().flat_map(|(l, r)| {
+        //     vec![
+        //         (l.clone(), r.clone()), // add original rule
+        //         (r.clone(), l.clone()), // add reversed rule
+        //     ]
+        // }).collect::<Vec<_>>();
+
+        for (i, rule1) in rules.iter().enumerate() {
+            for (j, rule2) in rules.iter().enumerate() {
                 if i > j {
                     continue; // only consider pairs once
                 }
@@ -613,6 +644,8 @@ fn main() {
                 }
                 cps.extend(simpl_cp);
             }
+        }
+
         }
         #[cfg(debug_assertions)]
         println!("Computed {} critical pairs", cps.len());
@@ -673,6 +706,8 @@ fn main() {
         // counted_cps.sort_by_key(|(_, count)| -count.clone());
         // counted_cps.sort_by_key(|(_, count, rule_count, size)| (-count.clone(), -rule_count.clone(), size.clone()));
         // counted_cps.sort_by_key(|(_, count, rule_count, size)| size.clone());
+        // counted_cps.sort_by_key(|(_, count, rule_count, size)| -count.clone());
+
         counted_cps.sort_by_key(|(_, count, rule_count, size)| {
             (size.clone(), -rule_count.clone(), -count.clone())
         });
@@ -693,6 +728,12 @@ fn main() {
         }
         // TODO: not clone
         kbe.E.extend(top_cps);
+
+        #[cfg(debug_assertions)]
+        println!("Rules before KBC:");
+        #[cfg(debug_assertions)]
+        printrules(&kbe.R);
+
 
         // kbo faster because only considers relevant critical pairs
         let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));

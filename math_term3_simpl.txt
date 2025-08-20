@@ -1,0 +1,46 @@
+Mul(B, Add(Zero, Mul(X, Add(Add(Add(Mul(X, One), Sub(Pow(Y, Zero), Div(Mul(Zero, Z), Pow(A, One)))), Div(Pow(Pow(B, One), One), Mul(One, One))), Div(Mul(D, Zero), Pow(E, One))))))
+Mul(B, Mul(X, Add(Add(Add(Mul(X, One), Sub(Pow(Y, Zero), Div(Mul(Zero, Z), Pow(A, One)))), Div(Pow(Pow(B, One), One), Mul(One, One))), Div(Mul(D, Zero), Pow(E, One)))))
+Mul(B, Mul(X, Add(Add(Add(X, Sub(Pow(Y, Zero), Div(Mul(Zero, Z), Pow(A, One)))), Div(Pow(Pow(B, One), One), Mul(One, One))), Div(Mul(D, Zero), Pow(E, One)))))
+Mul(B, Mul(X, Add(Add(Add(X, Sub(Pow(Y, Zero), Div(Zero, Pow(A, One)))), Div(Pow(Pow(B, One), One), Mul(One, One))), Div(Mul(D, Zero), Pow(E, One)))))
+Mul(B, Mul(X, Add(Add(Add(X, Sub(Pow(Y, Zero), Div(Zero, Pow(A, One)))), Div(Pow(Pow(B, One), One), One)), Div(Mul(D, Zero), Pow(E, One)))))
+Mul(B, Mul(X, Add(Add(Add(X, Sub(Pow(Y, Zero), Div(Zero, Pow(A, One)))), Div(Pow(Pow(B, One), One), One)), Div(D, Pow(E, One)))))
+Mul(B, Mul(X, Add(Add(Add(X, Sub(Pow(Y, Zero), Div(Zero, A))), Div(Pow(Pow(B, One), One), One)), Div(D, E))))
+Mul(B, Mul(X, Add(Add(Add(X, Sub(Pow(Y, Zero), Div(Zero, A))), Div(Pow(B, One), One)), Div(D, E))))
+Mul(B, Mul(X, Add(Add(Add(X, Sub(Pow(Y, Zero), Div(Zero, A))), Div(B, One)), Div(D, E))))
+
+
+Mul(B, Mul(X, Add(Add(Add(X, Sub(Pow(Y, Zero), Div(Zero, A))), Div(B, One)), Div(D, E))))
+Mul(B, Mul(X, Add(Add(Add(X, Sub(One, Div(Zero, A))), Div(B, One)), Div(D, E))))
+no rule? Div(Zero, A) = Zero (if A != Zero) -- via a/b = a*(b^-1) and a*b=b*a and a*0=0
+Mul(B, Mul(X, Add(Add(Add(X, Sub(One, Zero)), Div(B, One)), Div(D, E))))
+no rule? Div(B, One) = B (can be found)
+Mul(B, Mul(X, Add(Add(Add(X, Sub(One, Zero)), B), Div(D, E))))
+
+via Add(,Mul(MinusOne,Zero))
+Mul(B, Mul(X, Add(Add(Add(X, One), B), Div(D, E))))
+
+
+
+
+
+what I got:
+Sub(Mul(B, Pow(X, Two)), Sub(Zero, Sub(Mul(B, Mul(B, X)), Sub(Zero, Sub(Div(Zero, E), Sub(Zero, Mul(B, Mul(X, Sub(One, Div(Zero, A))))))))))
+
+5
+Add(Zero, Add(Mul(B, Mul(X, Div(B, One))), Add(Mul(B, Mul(X, Div(Zero, E))), Add(Mul(B, Pow(X, Two)), Mul(B, Mul(X, Sub(One, Div(Zero, A))))))))
+10
+Add(Div(Zero, E), Add(Mul(B, Pow(X, Two)), Add(Mul(B, Mul(X, Div(B, One))), Mul(B, Mul(X, Sub(One, Div(Zero, A)))))))
+15
+Add(Div(Zero, E), Add(Mul(B, Pow(X, Two)), Add(Mul(B, Mul(B, X)), Mul(B, Mul(X, Sub(One, Div(Zero, A)))))))
+25
+(Result: Add(Mul(B, Mul(X, Sub(Sub(X, MinusOne), Div(Zero, A)))), Add(Mul(B, Mul(B, X)), Div(Zero, E))))
+30 
+Sub(Div(Zero, E), Sub(Zero, Sub(Mul(B, Pow(X, Two)), Sub(Zero, Sub(Mul(B, Mul(B, X)), Sub(Zero, Mul(B, Mul(X, Sub(One, Div(Zero, A))))))))))
+60
+Sub(Div(Zero, E), Sub(Zero, Sub(Mul(X, Mul(X, B)), Sub(Zero, Sub(Mul(X, Pow(B, Two)), Sub(Zero, Mul(X, Mul(B, Sub(One, Div(Zero, A))))))))))
+70
+Sub(Div(Pow(Mul(X, B), Two), X), Sub(Zero, Sub(Div(Zero, E), Sub(Zero, Sub(Mul(X, Mul(X, B)), Sub(Zero, Mul(X, Mul(B, Sub(One, Div(Zero, A))))))))))
+80
+Sub(Div(Zero, E), Sub(Zero, Sub(Div(Div(Div(Div(B, Div(X, X)), Div(One, X)), Div(One, Div(Div(B, Div(X, X)), Div(One, X)))), B), Sub(Zero, Sub(Div(Div(Div(Div(B, Div(X, X)), Div(One, X)), Div(B, B)), Div(One, B)), Sub(Zero, Div(Div(Div(Div(Sub(One, Div(Zero, A)), Div(X, X)), Div(One, X)), Div(B, B)), Div(One, B))))))))
+100
+Sub(Sub(Div(B, Div(One, Div(X, Div(One, B)))), Sub(Zero, Sub(Div(Zero, E), Sub(Zero, Div(B, Div(One, Div(X, Div(One, Sub(One, Div(Zero, A)))))))))), Sub(Zero, Div(Div(Div(X, Div(One, B)), Div(One, Div(X, Div(One, B)))), B)))

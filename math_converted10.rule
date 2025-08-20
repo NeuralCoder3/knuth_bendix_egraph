@@ -1,0 +1,3 @@
+Mul(a, b) = Mul(b, a)
+Div(a, b) = Mul(a, Pow(b, MinusOne))
+Mul(a, Zero) = Zero
