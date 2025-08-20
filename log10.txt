@@ -1,0 +1,154 @@
+  0: Zero (Zero())
+  1: A (A())
+  2: Div(Zero, A) (Div(0, 1))
+Symbol counts:
+  A: 0 (0)
+  MinusOne: 1 (0)
+  Zero: 2 (0)
+  Pow: 1 (2)
+  Div: 1 (2)
+  Mul: 4 (2)
+Final precedence:
+  A: 0
+  MinusOne: 1
+  Zero: 2
+  Pow: 3
+  Div: 4
+  Mul: 5
+Rules:
+{ Mul(a, Pow(b, MinusOne)) -> Div(a, b)
+  Mul(Zero, a) -> Zero }
+Equations:
+{ Mul(a, b) = Mul(b, a) }
+Original:
+Div(Zero, A)
+Result:
+Div(Zero, A)
+
+
+Iteration 0
+DAG:
+  0: Zero (Zero())
+  1: A (A())
+  2: Div(Zero, A) (Div(0, 1))
+Simplify DAG.
+Apply R-rules
+DBG2: Apply rules "Mul(a, Pow(b, MinusOne))" -> "Div(a, b)"
+DBG2: Check Id 2
+DBG2: Check Id 0
+DBG2: Check Id 1
+DBG2: Apply rules "Mul(Zero, a)" -> "Zero"
+DBG2: Check Id 2
+DBG2: Check Id 0
+DBG2: Check Id 1
+Apply E-rules
+DBG2: Apply rules "Mul(a, b)" -> "Mul(b, a)"
+DBG2: Check Id 2
+DBG2: Check Id 0
+DBG2: Check Id 1
+DBG2: Apply rules "Mul(b, a)" -> "Mul(a, b)"
+DBG2: Check Id 2
+DBG2: Check Id 0
+DBG2: Check Id 1
+New rules:
+{ }
+DBG: Critical pair: Mul(a, Pow(b, MinusOne)) -> Div(a, b) with Mul(a, Pow(b, MinusOne)) -> Div(a, b)
+DBG:   OrgCritical pair: Div(a_1, b_1) = Div(a_1, b_1)
+DBG:   OrgCritical pair: Div(a, b) = Div(a, b)
+DBG: Critical pair: Mul(a, Pow(b, MinusOne)) -> Div(a, b) with Mul(Zero, a) -> Zero
+DBG:   OrgCritical pair: Zero = Div(Zero, b)
+DBG:  Simplified critical pair: Zero = Div(Zero, b)
+DBG: Critical pair: Mul(Zero, a) -> Zero with Mul(Zero, a) -> Zero
+DBG:   OrgCritical pair: Zero = Zero
+Computed 1 critical pairs
+Top 5 critical pairs:
+  Zero = Div(Zero, b)
+Rules before KBC:
+{ Mul(a, Pow(b, MinusOne)) -> Div(a, b)
+  Mul(Zero, a) -> Zero }
+Intermediate State:
+Rules:
+{ Div(Zero, b) -> Zero
+  Mul(a, Pow(b, MinusOne)) -> Div(a, b)
+  Mul(Zero, a) -> Zero }
+Equations:
+{ Mul(a, b) = Mul(b, a) }
+Original:
+Div(Zero, A)
+Result:
+Zero
+Extracted term:
+Div(Zero, A)
+
+
+Iteration 1
+DAG:
+  0: Zero (Zero())
+  1: A (A())
+  2: Div(Zero, A) (Div(0, 1))
+Simplify DAG.
+Apply R-rules
+DBG2: Apply rules "Div(Zero, b)" -> "Zero"
+DBG2: Check Id 2
+DBG: Match rule "Div(Zero, b)" -> "Zero" on node 2 (Div(Zero, A))
+DBG2: Subst l
+DBG2: Subst r
+DBG2: Substed: "Div(Zero, A)" -> "Zero"
+Before Clone
+DBG2: After If
+DBG2: Check Id 0
+DBG2: Check Id 1
+DBG: Replace node 2 with new term Zero (previously Div(Zero, A))
+DBG2: Apply rules "Mul(a, Pow(b, MinusOne))" -> "Div(a, b)"
+DBG2: Check Id 0
+DBG2: Check Id 1
+DBG2: Apply rules "Mul(Zero, a)" -> "Zero"
+DBG2: Check Id 0
+DBG2: Check Id 1
+Apply E-rules
+DBG2: Apply rules "Mul(a, b)" -> "Mul(b, a)"
+DBG2: Check Id 0
+DBG2: Check Id 1
+DBG2: Apply rules "Mul(b, a)" -> "Mul(a, b)"
+DBG2: Check Id 0
+DBG2: Check Id 1
+New rules:
+{ Div(Zero, A) -> Zero }
+DBG: Critical pair: Div(Zero, b) -> Zero with Div(Zero, b) -> Zero
+DBG:   OrgCritical pair: Zero = Zero
+DBG: Critical pair: Div(Zero, b) -> Zero with Mul(a, Pow(b, MinusOne)) -> Div(a, b)
+DBG: Critical pair: Div(Zero, b) -> Zero with Mul(Zero, a) -> Zero
+DBG: Critical pair: Div(Zero, b) -> Zero with Div(Zero, A) -> Zero
+DBG:   OrgCritical pair: Zero = Zero
+DBG: Critical pair: Mul(a, Pow(b, MinusOne)) -> Div(a, b) with Mul(a, Pow(b, MinusOne)) -> Div(a, b)
+DBG:   OrgCritical pair: Div(a_1, b_1) = Div(a_1, b_1)
+DBG:   OrgCritical pair: Div(a, b) = Div(a, b)
+DBG: Critical pair: Mul(a, Pow(b, MinusOne)) -> Div(a, b) with Mul(Zero, a) -> Zero
+DBG:   OrgCritical pair: Zero = Div(Zero, b)
+DBG: Critical pair: Mul(a, Pow(b, MinusOne)) -> Div(a, b) with Div(Zero, A) -> Zero
+DBG: Critical pair: Mul(Zero, a) -> Zero with Mul(Zero, a) -> Zero
+DBG:   OrgCritical pair: Zero = Zero
+DBG: Critical pair: Mul(Zero, a) -> Zero with Div(Zero, A) -> Zero
+DBG: Critical pair: Div(Zero, A) -> Zero with Div(Zero, A) -> Zero
+DBG:   OrgCritical pair: Zero = Zero
+Computed 0 critical pairs
+Top 5 critical pairs:
+Rules before KBC:
+{ Div(Zero, b) -> Zero
+  Mul(a, Pow(b, MinusOne)) -> Div(a, b)
+  Mul(Zero, a) -> Zero
+  Div(Zero, A) -> Zero }
+Intermediate State:
+Rules:
+{ Div(Zero, b) -> Zero
+  Mul(a, Pow(b, MinusOne)) -> Div(a, b)
+  Mul(Zero, a) -> Zero
+  Div(Zero, A) -> Zero }
+Equations:
+{ Mul(a, b) = Mul(b, a) }
+Original:
+Div(Zero, A)
+Result:
+Zero
+Extracted term:
+Zero

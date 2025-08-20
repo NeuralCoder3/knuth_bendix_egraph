@@ -370,7 +370,7 @@ fn read_equations(path: &str) -> EquationSet {
         .unwrap()
         .lines()
         .map(|line| line.trim())
-        .filter(|line| !line.is_empty() && !line.starts_with("//"))
+        .filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with("#"))
         .map(|line| parseeq(line))
         .collect()
 }
@@ -588,7 +588,11 @@ fn main() {
         let mut cps = vec![];
 
         {
-            let rules = kbe.R.clone();
+            // let rules = kbe.R.clone();
+            let mut rules = kbe.R.clone();
+            // R + E in both direction
+            rules.extend(kbe.E.iter().map(|(l, r)| (l.clone(), r.clone())));
+            rules.extend(kbe.E.iter().map(|(l, r)| (r.clone(), l.clone())));
         // let rules = kbe.R.iter().flat_map(|(l, r)| {
         //     vec![
         //         (l.clone(), r.clone()), // add original rule
