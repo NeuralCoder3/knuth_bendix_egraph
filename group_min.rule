@@ -18,3 +18,9 @@ M(F(x), G(y)) = M(G(y), F(x))
 // M(G(x), H(y)) = M(H(y), G(x))
 // abelian group (commutativity)
 // M(x, y) = M(y, x) 
+
+// to confuse, but in theory, 
+// if P -> M nothing,
+// wrong: if M -> P, cp with all M rules, resulting in P rules (or at least P -> M rules)
+// M -> P: all M replaced with P, now CP rules with M?
+P(x,y) = M(x,y)

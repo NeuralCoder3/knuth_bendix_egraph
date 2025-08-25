@@ -1,1 +1,1 @@
-A(M(G(I(B)), M(F(A), G(B))), F(I(A)))
+P(M(G(I(B)), M(F(A), G(B))), F(I(A)))

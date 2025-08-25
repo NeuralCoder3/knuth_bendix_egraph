@@ -634,7 +634,8 @@ fn main() {
                     })
                     .filter(|(l, r)| {
                         // only keep if not trivial
-                        l != r && !kbe.E.contains(&(l.clone(), r.clone()))
+                        l != r && !kbe.E.contains(&(l.clone(), r.clone())) 
+                        && !kbe.R.iter().any(|(l_r, r_r)| (l == l_r && r == r_r) || (l == r_r && r == l_r))
                     })
                     .collect::<Vec<_>>();
                 if simpl_cp.is_empty() {
@@ -663,9 +664,10 @@ fn main() {
         let mut counted_cps = cps
             .iter()
             .cloned()
-            // deduplicate
-            // .collect::<HashSet<_>>()
-            // .into_iter()
+
+            // dedup for testing, TODO: should not be necessar^
+            .collect::<HashSet<_>>()
+            .into_iter()
             .map(|cp| {
                 let (l, r) = cp;
                 let mut count = 0;
