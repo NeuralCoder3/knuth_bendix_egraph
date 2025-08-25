@@ -293,6 +293,7 @@ where
 {
     let mut new_rules = vec![];
 
+    // TODO: rule application never result in new rules (always subsumed)
     #[cfg(debug_assertions)]
     println!("Apply R-rules");
     new_rules.extend(apply_rules_var(
@@ -556,8 +557,8 @@ fn main() {
         // TODO: without 3.2 this would not resolve as equations are oriented
         // we would just eagerly rewrite the graph? (adding rules to R help? or that we keep the subexpressions?)
         // let ground_instances = ground_instances(&kbe);
-        let mut instances: HashSet<Term> = HashSet::new();
-        let mut visited: HashMap<ENode, Term> = HashMap::new();
+        // let mut instances: HashSet<Term> = HashSet::new();
+        // let mut visited: HashMap<ENode, Term> = HashMap::new();
         // assert that all rules in R are oriented according to the lpo
         #[cfg(debug_assertions)]
         for rule in kbe.R.iter() {
@@ -581,6 +582,7 @@ fn main() {
         #[cfg(debug_assertions)]
         printrules(&new_rules);
         // kbe.E.extend(new_rules);
+        // new rules should always be ground and are already oriented
         kbe.R.extend(new_rules);
 
         // Step 3.2 (KBO: Add critical pairs)
@@ -660,6 +662,10 @@ fn main() {
         // for each node in C, search if a cps applies, count how often
         let mut counted_cps = cps
             .iter()
+            .cloned()
+            // deduplicate
+            // .collect::<HashSet<_>>()
+            // .into_iter()
             .map(|cp| {
                 let (l, r) = cp;
                 let mut count = 0;
@@ -683,23 +689,23 @@ fn main() {
 
                 let mut rule_count = 0;
                 for (l_rule, r_rule) in kbe.R.iter() {
-                    if term_contains(&l_rule, l) {
+                    if term_contains(&l_rule, &l) {
                         rule_count += 1;
                     }
-                    if term_contains(&r_rule, l) {
+                    if term_contains(&r_rule, &l) {
                         rule_count += 1;
                     }
-                    if term_contains(&l_rule, r) {
+                    if term_contains(&l_rule, &r) {
                         rule_count += 1;
                     }
-                    if term_contains(&r_rule, r) {
+                    if term_contains(&r_rule, &r) {
                         rule_count += 1;
                     }
                 }
 
                 let size = (strterm(&l).len() + strterm(&r).len()) as i32;
 
-                (cp, count, rule_count, size)
+                ((l,r), count, rule_count, size)
             })
             // TODO: filter does not work
             // e.g. group axioms with Mul(A, Mul(Inv(A), B)) -> B
