@@ -34,7 +34,8 @@ where
         // printrule(&collapsed.0);
         // printrules(&collapsed.1);
         // printeqs(&collapsed.2);
-        let added = add_rule(collapsed);
+        // let added = add_rule(collapsed);
+        let added = add_rule(composed);
         let simplified = simplify(added);
         let removed = remove_trivial(verbose, simplified);
         removed
