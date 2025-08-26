@@ -391,7 +391,7 @@ pub fn collapse((rule, rules, eqs): (Rule, RuleSet, EquationSet)) -> (Rule, Rule
     let (l, _) = &rule;
     let new_rules: RuleSet = rules
         .into_iter()
-        .filter(|(l_prime, _)| !contain(l, l_prime))
+        // .filter(|(l_prime, _)| !contain(l, l_prime))
         .collect();
     (rule, new_rules, eqs)
 }

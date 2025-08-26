@@ -24,7 +24,16 @@ where
     let copy = state.clone();
     if let Ok(oriented) = orient_equation(lpo, copy) {
         let composed = compose(oriented);
-        let collapsed = collapse(composed);
+        // println!("Composed:");
+        // printrule(&composed.0);
+        // printrules(&composed.1);
+        // printeqs(&composed.2);
+        // TODO: collapse is wrong
+        // let collapsed = collapse(composed);
+        // println!("Collapsed:");
+        // printrule(&collapsed.0);
+        // printrules(&collapsed.1);
+        // printeqs(&collapsed.2);
         let added = add_rule(collapsed);
         let simplified = simplify(added);
         let removed = remove_trivial(verbose, simplified);
@@ -45,12 +54,20 @@ where
     let mut new_state = state;
     while changed {
         changed = false;
+        
+        // println!("\n  Knuth-Bendix step:");
+        // println!("Rules:");
+        // printrules(&new_state.0);
+        // println!("Equations:");
+        // printeqs(&new_state.1);
+
         let new_state_prime = knuth_steps(verbose, lpo, &new_state);
         if new_state != new_state_prime {
             changed = true;
             new_state = new_state_prime;
         }
     }
+    println!();
     new_state
 }
 
@@ -513,10 +530,23 @@ fn main() {
     // Step 0 (define precedence)
     let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
+    #[cfg(debug_assertions)]
+    {
+    println!("Rules:");
+    printrules(&kbe.R);
+    println!("Equations:");
+    printeqs(&kbe.E);
+    println!("KBC Step");
+    }
+
     kbe.R = vec![];
     let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
     kbe.R = state.0;
     kbe.E = state.1;
+
+
+    
+
 
     let t_prime = linorm(&kbe.R, &t);
     println!("Rules:");
@@ -581,9 +611,22 @@ fn main() {
         println!("New rules:");
         #[cfg(debug_assertions)]
         printrules(&new_rules);
-        // kbe.E.extend(new_rules);
+        kbe.E.extend(new_rules);
         // new rules should always be ground and are already oriented
-        kbe.R.extend(new_rules);
+        // correction: but rules are not considered in mutual simplification
+        // kbe.R.extend(new_rules);
+
+        // let mut workset = (kbe.R.clone(), kbe.E.clone());
+        // for rule in new_rules {
+        //     let composed = compose((rule, workset.0, workset.1));
+        //     let collapsed = collapse(composed);
+        //     workset = add_rule(collapsed);
+        // }
+        // let simplified = simplify(workset);
+        // let removed = remove_trivial(true, simplified);
+        // kbe.R = removed.0;
+        // kbe.E = removed.1;
+
 
         // Step 3.2 (KBO: Add critical pairs)
         // TODO: keep previous critical pairs instead of complete recomputation
@@ -630,12 +673,19 @@ fn main() {
                     .map(|(l, r)| {
                         let l_prime = linorm(&kbe.R, &l);
                         let r_prime = linorm(&kbe.R, &r);
+
+                        // normalize variables
+
                         (l_prime, r_prime)
                     })
                     .filter(|(l, r)| {
                         // only keep if not trivial
-                        l != r && !kbe.E.contains(&(l.clone(), r.clone())) 
-                        && !kbe.R.iter().any(|(l_r, r_r)| (l == l_r && r == r_r) || (l == r_r && r == l_r))
+                        l != r
+                        && !kbe.E.iter().any(|eq| sameeq(eq, &(l.clone(), r.clone())))
+                        && !kbe.R.iter().any(|rule| sameeq(rule, &(l.clone(), r.clone())))
+                        // && !kbe.E.contains(&(l.clone(), r.clone())) 
+                        // && !kbe.E.contains(&(r.clone(), l.clone())) 
+                        // && !kbe.R.iter().any(|(l_r, r_r)| (l == l_r && r == r_r) || (l == r_r && r == l_r))
                     })
                     .collect::<Vec<_>>();
                 if simpl_cp.is_empty() {
