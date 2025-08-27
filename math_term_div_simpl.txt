@@ -1,0 +1,5 @@
+Div(B, One)
+Mul(B, Pow(One, MinusOne))
+Mul(B, If(Eq(One,Zero),Pow(One, MinusOne),Div(One, One)))
+Mul(B, If(False,Pow(One, MinusOne),Div(One, One)))
+Mul(B, Div(One, One))

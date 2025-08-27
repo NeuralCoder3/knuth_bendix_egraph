@@ -1,0 +1,17 @@
+Mul(a, b) = Mul(b, a)
+Mul(a, Mul(b, c)) = Mul(Mul(a, b), c)
+Div(a, b) = Mul(a, Pow(b, MinusOne))
+Mul(a, Zero) = Zero
+Mul(a, One) = a
+a = Mul(a, One)
+Pow(x, Zero) = If(Eq(x,Zero),Pow(x, Zero),One)
+Pow(x, One) = x
+Pow(x, MinusOne) = If(Eq(x,Zero),Pow(x, MinusOne),Div(One, x))
+Div(a, a) = If(Eq(a,Zero),Div(a,a),One)
+If(True,y,z) = y
+If(False,y,z) = z
+Eq(x,x) = True
+Eq(A,Zero) = False
+Eq(Y,Zero) = False
+Eq(B,Zero) = False
+Eq(One,Zero) = False

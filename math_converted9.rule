@@ -29,3 +29,5 @@ If(False,y,z) = z
 Eq(x,x) = True
 Eq(A,Zero) = False
 Eq(Y,Zero) = False
+Eq(B,Zero) = False
+Eq(One,Zero) = False

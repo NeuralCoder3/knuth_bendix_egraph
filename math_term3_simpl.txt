@@ -19,6 +19,7 @@ Mul(B, Mul(X, Add(Add(Add(X, Sub(One, Zero)), B), Div(D, E))))
 via Add(,Mul(MinusOne,Zero))
 Mul(B, Mul(X, Add(Add(Add(X, One), B), Div(D, E))))
 
+b*(x*(((x+1)+b)+d/e))
 
 
 
@@ -44,3 +45,15 @@ Sub(Div(Pow(Mul(X, B), Two), X), Sub(Zero, Sub(Div(Zero, E), Sub(Zero, Sub(Mul(X
 Sub(Div(Zero, E), Sub(Zero, Sub(Div(Div(Div(Div(B, Div(X, X)), Div(One, X)), Div(One, Div(Div(B, Div(X, X)), Div(One, X)))), B), Sub(Zero, Sub(Div(Div(Div(Div(B, Div(X, X)), Div(One, X)), Div(B, B)), Div(One, B)), Sub(Zero, Div(Div(Div(Div(Sub(One, Div(Zero, A)), Div(X, X)), Div(One, X)), Div(B, B)), Div(One, B))))))))
 100
 Sub(Sub(Div(B, Div(One, Div(X, Div(One, B)))), Sub(Zero, Sub(Div(Zero, E), Sub(Zero, Div(B, Div(One, Div(X, Div(One, Sub(One, Div(Zero, A)))))))))), Sub(Zero, Div(Div(Div(X, Div(One, B)), Div(One, Div(X, Div(One, B)))), B)))
+
+
+
+20: (term not term 3)
+Add(Mul(D(A, Sub(A, One)), Mul(Add(A, Two), Div(Pow(Sub(A, One), Add(A, Two)), Sub(A, One)))), Mul(Ln(Sub(A, One)), Mul(D(A, Add(A, Two)), Pow(Sub(A, One), Add(A, Two)))))
+
+20: (term3)
+Add(Mul(B, X), Add(Mul(B, Pow(X, Two)), Mul(B, Div(Mul(B, X), One))))
+b*x + b*x^2 + b*(b*x)/1
+with 1!=0
+Add(Mul(X, B), Add(Mul(X, Pow(B, Two)), Mul(B, Pow(X, Two))))
+x*b+x*b^2+b*x^2

@@ -1,0 +1,8 @@
+Sub(Add(A,B),B)
+Add(Add(A,B), Mul(MinusOne, B))
+Add(A,Add(B, Mul(MinusOne, B)))
+Add(A,Sub(B, B))
+Add(A,Zero)
+A
+
+after 46 iterations
