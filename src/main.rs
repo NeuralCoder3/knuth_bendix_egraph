@@ -75,7 +75,7 @@ where
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ENode {
-    label: GlobalSymbol, // TODO: globalize in table for efficiency
+    label: GlobalSymbol,
     children: Vec<Id>,
 }
 
@@ -100,7 +100,6 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
             panic!("Cannot insert variable into KBE graph: {:?}", var);
         }
         Term::Function(f, ts) => {
-            // TODO: normalize here or is input always normalized?
             // embed all children, then create a new node (keep track of parent)
             let mut children = vec![];
             for t_prime in ts {
@@ -315,7 +314,9 @@ where
     // TODO: rule application never result in new rules (always subsumed)
     #[cfg(debug_assertions)]
     println!("Apply R-rules");
-    new_rules.extend(apply_rules_var(
+    // for R we know the grounded instances
+    // => no need to add
+    apply_rules_var(
         lpo,
         kbe,
         &kbe.R
@@ -323,7 +324,7 @@ where
             .map(|(l, r)| (l.clone(), r.clone()))
             .collect::<Vec<_>>(),
         false,
-    ));
+    );
     // #[cfg(debug_assertions)]
     // println!("Apply R-rules inverse");
     // new_rules.extend(apply_rules_var(
@@ -563,6 +564,7 @@ fn main() {
 
     let mut current_result = None;
     let mut achieved_time = None;
+    let mut critical_pair_cache : HashMap<(&Rule, &Rule), Vec<(Term,Term)>> = HashMap::new();
 
     // Step 3 (loop)
     for i in 0..args.iterations {
@@ -590,11 +592,8 @@ fn main() {
         }
 
         // Step 3.1 (E-Graph: Apply rules on graph)
-        // TODO: without 3.2 this would not resolve as equations are oriented
-        // we would just eagerly rewrite the graph? (adding rules to R help? or that we keep the subexpressions?)
-        // let ground_instances = ground_instances(&kbe);
-        // let mut instances: HashSet<Term> = HashSet::new();
-        // let mut visited: HashMap<ENode, Term> = HashMap::new();
+        // Note: alone this is not egraph as we only keep smaller terms
+        // the larger terms are represented by R but we do not act on the left sides of R in 3.1
         // assert that all rules in R are oriented according to the lpo
         #[cfg(debug_assertions)]
         for rule in kbe.R.iter() {
@@ -604,11 +603,9 @@ fn main() {
             }
         }
 
-        // TODO: also at rewrite order
-        // add all instances to E, knuth bendix (orient, simpl)
-        // or only if left/right in C
-
-        // is from E already onriented/grounded is oriented
+        // we simplify the DAG with R and E
+        // all (grounded) instances from R are already known and need to not be added
+        // instances from E are oriented, replaced in the DAG and recorded
 
         #[cfg(debug_assertions)]
         println!("Simplify DAG.");
@@ -617,22 +614,10 @@ fn main() {
         println!("New rules:");
         #[cfg(debug_assertions)]
         printrules(&new_rules);
-        kbe.E.extend(new_rules);
         // new rules should always be ground and are already oriented
-        // correction: but rules are not considered in mutual simplification
-        // kbe.R.extend(new_rules);
-
-        // let mut workset = (kbe.R.clone(), kbe.E.clone());
-        // for rule in new_rules {
-        //     let composed = compose((rule, workset.0, workset.1));
-        //     let collapsed = collapse(composed);
-        //     workset = add_rule(collapsed);
-        // }
-        // let simplified = simplify(workset);
-        // let removed = remove_trivial(true, simplified);
-        // kbe.R = removed.0;
-        // kbe.E = removed.1;
-
+        // however, rules are not considered in mutual simplification => need first be added to E
+        // 3.2 will take care of the simplification
+        kbe.E.extend(new_rules);
 
         // Step 3.2 (KBO: Add critical pairs)
         // TODO: keep previous critical pairs instead of complete recomputation
@@ -656,6 +641,12 @@ fn main() {
                 if i > j {
                     continue; // only consider pairs once
                 }
+                // TODO: use i,j as indices instead of terms
+                if let Some(cached) = critical_pair_cache.get(&(rule1,rule2)) {
+                    cps.extend(cached.clone());
+                    continue;
+                }
+
                 #[cfg(debug_assertions)]
                 println!(
                     "DBG: Critical pair: {} -> {} with {} -> {}",
@@ -712,16 +703,13 @@ fn main() {
         }
         #[cfg(debug_assertions)]
         println!("Computed {} critical pairs", cps.len());
-        // TODO: only add some critical pairs (ematch or grounded (how many from R are subsumed))
-        // kbe.E.extend(cps);
-        // simp via R, match on C
 
         // for each node in C, search if a cps applies, count how often
         let mut counted_cps = cps
             .iter()
             .cloned()
 
-            // dedup for testing, TODO: should not be necessar^
+            // dedup for testing, TODO: should not be necessary
             .collect::<HashSet<_>>()
             .into_iter()
             .map(|cp| {
@@ -763,38 +751,29 @@ fn main() {
 
                 let size = (strterm(&l).len() + strterm(&r).len()) as i32;
 
-                ((l,r), count, rule_count, size)
+                ((l,r), (count, rule_count, size))
             })
-            // TODO: filter does not work
-            // e.g. group axioms with Mul(A, Mul(Inv(A), B)) -> B
-            // the first critical pair would be (One, Mul(Inv(x), Mul(x,z))) but that does not occur in the graph
-            // .filter(|(_, count)| *count > 0) // only keep those with count > 0
             .collect::<Vec<_>>();
-        // sort by count descending
-        // counted_cps.sort_by_key(|(_, count)| -count.clone());
-        // counted_cps.sort_by_key(|(_, count, rule_count, size)| (-count.clone(), -rule_count.clone(), size.clone()));
-        // counted_cps.sort_by_key(|(_, count, rule_count, size)| size.clone());
-        // counted_cps.sort_by_key(|(_, count, rule_count, size)| -count.clone());
 
-        counted_cps.sort_by_key(|(_, count, rule_count, size)| {
+        counted_cps.sort_by_key(|(_, (count, rule_count, size))| {
             (size.clone(), -rule_count.clone(), -count.clone())
+            // size.clone()
         });
 
-        // counted_cps.sort_by_key(|(_, count, rule_count)| (-count.clone()+ -rule_count.clone()));
         // take top 5 to extend E
         let top_cps = counted_cps
             .into_iter()
             .take(5)
-            .map(|(cp, _, _, _)| cp.clone())
+            .map(|(cp, _)| cp.clone())
+            // .map(|((l,r), _)| (l.clone(), r.clone()))
             .collect::<Vec<_>>();
-        // let top_cps = counted_cps.into_iter().map(|(cp, _, _, _)| cp.clone()).collect::<Vec<_>>();
+        
         #[cfg(debug_assertions)]
         println!("Top 5 critical pairs:");
         #[cfg(debug_assertions)]
         for (l, r) in top_cps.iter() {
             println!("  {} = {}", strterm(l), strterm(r));
         }
-        // TODO: not clone
         kbe.E.extend(top_cps);
 
         #[cfg(debug_assertions)]
@@ -820,7 +799,7 @@ fn main() {
         let t_prime = linorm(&kbe.R, &t);
         let t_prime_str = strterm(&t_prime);
         println!("{}", t_prime_str);
-        // exit(0);
+        
         let t_extract = extract_term(&kbe, t_id);
         println!("Extracted term:");
         println!("{}", strterm(&t_extract));
