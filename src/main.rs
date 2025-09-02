@@ -171,7 +171,7 @@ fn match_rule_var_subst(
     }
 }
 
-pub fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
+fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
     match t {
         Term::Variable(xi) => {
             if let Some((_, id)) = ss.iter().find(|(var, _)| var == xi) {
@@ -218,7 +218,7 @@ where
 
     for (l, r) in rules.iter() {
         // for id in kbe.C.left_values() {
-        let ids = kbe.C.iter().map(|(id, _)| (id.clone()));
+        let ids = kbe.C.iter().map(|(id, _)| id.clone());
 
         let mut rewrites = vec![];
         #[cfg(debug_assertions)]
@@ -483,7 +483,7 @@ fn main() {
     let mut symbol_counts = HashMap::new();
     count_symbols(&t, &mut symbol_counts);
     // set each to zero
-    for (symbol, count) in symbol_counts.iter_mut() {
+    for (_, count) in symbol_counts.iter_mut() {
         // *count = 0; // reset counts
         count.count = 0;
     }
@@ -497,7 +497,7 @@ fn main() {
     }
     // sort by count descending
     let mut sorted_symbols: Vec<_> = symbol_counts.into_iter().collect();
-    sorted_symbols.sort_by_key(|(_, count)| ((count.count as i64) + 100*(count.arity as i64))); // sort by count descending
+    sorted_symbols.sort_by_key(|(_, count)| (count.count as i64) + 100*(count.arity as i64)); // sort by count descending
     // sorted_symbols.reverse();
     #[cfg(debug_assertions)]
     println!("Symbol counts:");

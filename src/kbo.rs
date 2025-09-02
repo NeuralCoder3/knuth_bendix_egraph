@@ -16,11 +16,11 @@ use crate::types::*;
 static LPO_CACHE: Lazy<Mutex<HashMap<(Term, Term), bool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Clears the LPO cache to free memory
-pub fn clear_lpo_cache() {
-    if let Ok(mut cache) = LPO_CACHE.lock() {
-        cache.clear();
-    }
-}
+// pub fn clear_lpo_cache() {
+//     if let Ok(mut cache) = LPO_CACHE.lock() {
+//         cache.clear();
+//     }
+// }
 
 /// Error type indicating that completion failed.
 #[derive(Debug)]
@@ -387,11 +387,12 @@ pub fn deduce_critical_pairs(
 }
 
 /// Removes rules from `rules` whose left–hand side is contained in the left–hand side of `rule`.
+// TODO: this is wrong compared to "real" KBO
 pub fn collapse((rule, rules, eqs): (Rule, RuleSet, EquationSet)) -> (Rule, RuleSet, EquationSet) {
     let (l, _) = &rule;
     let new_rules: RuleSet = rules
         .into_iter()
-        // .filter(|(l_prime, _)| !contain(l, l_prime))
+        .filter(|(l_prime, _)| !contain(l, l_prime))
         .collect();
     (rule, new_rules, eqs)
 }

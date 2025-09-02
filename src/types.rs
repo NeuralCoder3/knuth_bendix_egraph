@@ -1,5 +1,5 @@
-use std::fmt;
-use std::error::Error;
+// use std::fmt;
+// use std::error::Error;
 
 pub type FunSym = String;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -17,14 +17,14 @@ pub type EquationSet = Vec<Equation>;
 pub type SubstitutionSet = Vec<Substitution>;
 pub type Precedence = Vec<(FunSym, i32)>;
 
-/// Error type to indicate that the completion process failed.
-#[derive(Debug)]
-pub struct CompletionFailed;
+// /// Error type to indicate that the completion process failed.
+// #[derive(Debug)]
+// pub struct CompletionFailed;
 
-impl fmt::Display for CompletionFailed {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CompletionFailed")
-    }
-}
+// impl fmt::Display for CompletionFailed {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "CompletionFailed")
+//     }
+// }
 
-impl Error for CompletionFailed {}
+// impl Error for CompletionFailed {}
