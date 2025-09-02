@@ -388,14 +388,31 @@ pub fn deduce_critical_pairs(
 
 /// Removes rules from `rules` whose left–hand side is contained in the left–hand side of `rule`.
 // TODO: this is wrong compared to "real" KBO
-pub fn collapse((rule, rules, eqs): (Rule, RuleSet, EquationSet)) -> (Rule, RuleSet, EquationSet) {
-    let (l, _) = &rule;
-    let new_rules: RuleSet = rules
-        .into_iter()
-        .filter(|(l_prime, _)| !contain(l, l_prime))
-        .collect();
-    (rule, new_rules, eqs)
-}
+// pub fn collapse<F>(lpo_gt: &F, (rule, rules, eqs): (Rule, RuleSet, EquationSet)) -> (Rule, RuleSet, EquationSet) 
+// where
+//     F: Fn(&Term, &Term) -> bool,
+// {
+//     let (l, _) = &rule;
+//     // collapse with other rules
+//     // Part1: simplify other rules with this one
+//     // if others left side is larger than other, add new as equation
+
+//     // let to_simplify = rules.into_iter()
+//     //     .filter(|(l_prime, _)| lpo_gt(l_prime, l))
+//     //     .collect::<RuleSet>();
+//     let (to_simplify, remaining) = rules.into_iter()
+//         .partition::<RuleSet, _>(|(l_prime, _)| lpo_gt(l_prime, l));
+
+//     // simplify the left side with the rule
+//     for (l_prime, r_prime) in to_simplify {
+//         let new_left = linorm(&[l.clone()], &l_prime);
+//         let new_right = linorm(&[l.clone()], &r_prime);
+//         eqs.insert((new_left, new_right));
+//     }
+
+
+//     (rule, new_rules, eqs)
+// }
 
 /// Adds the new rule `r` to the set of rules.
 pub fn add_rule((r, rules, eqs): (Rule, RuleSet, EquationSet)) -> (RuleSet, EquationSet) {
@@ -433,7 +450,8 @@ where
     let oriented = orient_equation(lpo, state).expect("CompletionFailed");
     let composed = compose(oriented);
     let deduced = deduce_critical_pairs(composed);
-    let collapsed = collapse(deduced);
+    // let collapsed = collapse(lpo,deduced);
+    let collapsed = deduced;
     let added = add_rule(collapsed);
     let simplified = simplify(added);
     let removed = remove_trivial(verbose, simplified);

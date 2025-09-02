@@ -416,6 +416,7 @@ struct Args {
 }
 
 fn main() {
+    let start_time = std::time::Instant::now();
     let args = Args::parse();
 
     let mut kbe = KBEGraph {
@@ -558,6 +559,9 @@ fn main() {
     println!("{}", strterm(&t));
     println!("Result:");
     println!("{}", strterm(&t_prime));
+
+    let mut current_result = None;
+    let mut achieved_time = None;
 
     // Step 3 (loop)
     for i in 0..args.iterations {
@@ -813,11 +817,21 @@ fn main() {
         println!("{}", strterm(&t));
         println!("Result:");
         let t_prime = linorm(&kbe.R, &t);
-        println!("{}", strterm(&t_prime));
+        let t_prime_str = strterm(&t_prime);
+        println!("{}", t_prime_str);
         // exit(0);
         let t_extract = extract_term(&kbe, t_id);
         println!("Extracted term:");
         println!("{}", strterm(&t_extract));
+
+        if current_result.is_none() || current_result.as_ref().unwrap() != &t_prime_str {
+            current_result = Some(t_prime_str);
+            achieved_time = Some(start_time.elapsed());
+        }
+        println!("Time elapsed: {:.2?}", start_time.elapsed());
+        if let Some(achieved_time) = achieved_time {
+            println!("Achieved after: {:.2?}", achieved_time);
+        }
     }
 
     // match using R and E (ground instances)
