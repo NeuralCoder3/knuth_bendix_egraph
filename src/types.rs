@@ -1,7 +1,9 @@
 // use std::fmt;
 // use std::error::Error;
 
-pub type FunSym = String;
+use symbol_table::GlobalSymbol;
+
+pub type FunSym = GlobalSymbol;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VarSym(pub String, pub i32);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

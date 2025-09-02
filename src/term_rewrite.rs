@@ -1,3 +1,5 @@
+use symbol_table::GlobalSymbol;
+
 use crate::types::*;
 use crate::util::*;
 
@@ -291,24 +293,24 @@ pub fn var(x: &str) -> Term {
 
 /// [const_ c] creates a constant (a function symbol with no arguments).
 pub fn const_(c: &str) -> Term {
-    Term::Function(c.to_string(), vec![])
+    Term::Function(GlobalSymbol::from(c), vec![])
 }
 
 /// [func f xs] creates a function application whose arguments are the variables named in [xs].
 pub fn func(f: &str, xs: &[&str]) -> Term {
     let vars: Vec<Term> = xs.iter().map(|x| var(x)).collect();
-    Term::Function(f.to_string(), vars)
+    Term::Function(GlobalSymbol::from(f), vars)
 }
 
 /// [call f ts] creates a function application with the given list of terms.
 pub fn call(f: &str, ts: Vec<Term>) -> Term {
-    Term::Function(f.to_string(), ts)
+    Term::Function(GlobalSymbol::from(f), ts)
 }
 
 /// [nest f n t] nests the term [t] under [n] occurrences of the function symbol [f].
 pub fn nest(f: &str, n: usize, t: Term) -> Term {
     if n > 0 {
-        Term::Function(f.to_string(), vec![nest(f, n - 1, t)])
+        Term::Function(GlobalSymbol::from(f), vec![nest(f, n - 1, t)])
     } else {
         t
     }
@@ -475,7 +477,7 @@ pub fn parsefun(exp: &str) -> Term {
     if s.is_empty() {
         panic!("ParseError")
     } else {
-        Term::Function(parsefunsym(s), parseargs(s))
+        Term::Function(GlobalSymbol::from(parsefunsym(s)), parseargs(s))
     }
 }
 
@@ -560,7 +562,7 @@ pub fn strterm(t: &Term) -> String {
         Term::Variable(VarSym(x, i)) => format!("{}_{}", x, i),
         Term::Function(f, ts) => {
             if ts.is_empty() {
-                f.clone()
+                f.to_string()
             } else {
                 format!("{}({})", f, strtermlist(ts))
             }

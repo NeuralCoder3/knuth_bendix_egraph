@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::stdout;
 use std::io::Write;
+use symbol_table::GlobalSymbol;
 
 use crate::kbo::*;
 use crate::term_rewrite::*;
@@ -74,7 +75,7 @@ where
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ENode {
-    label: String, // TODO: globalize in table for efficiency
+    label: GlobalSymbol, // TODO: globalize in table for efficiency
     children: Vec<Id>,
 }
 
@@ -107,7 +108,7 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
                 children.push(child);
             }
             let node = ENode {
-                label: f.clone(),
+                label: *f,
                 children,
             };
             if let Some(id) = kbe.C.get_by_right(&node) {
@@ -128,7 +129,7 @@ fn extract_term(kbe: &KBEGraph, id: Id) -> Term {
         let child_term = extract_term(kbe, *child);
         children.push(child_term);
     }
-    Term::Function(node.label.clone(), children)
+    Term::Function(node.label, children)
 }
 
 fn match_rule_var(kbe: &KBEGraph, left: &Term, node_id: Id) -> bool {
@@ -362,11 +363,11 @@ struct SymbolCount {
     count: usize,
 }
 
-fn count_symbols(t: &Term, map: &mut HashMap<String, SymbolCount>) {
+fn count_symbols(t: &Term, map: &mut HashMap<GlobalSymbol, SymbolCount>) {
     match t {
         Term::Variable(_) => {}
         Term::Function(f, ts) => {
-            map.entry(f.clone()).or_insert(SymbolCount { arity: ts.len(), count: 0 }).count += 1;
+            map.entry(*f).or_insert(SymbolCount { arity: ts.len(), count: 0 }).count += 1;
             for t_prime in ts {
                 count_symbols(t_prime, map);
             }
