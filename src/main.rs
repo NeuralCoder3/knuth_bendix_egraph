@@ -704,8 +704,6 @@ fn main() {
                         strterm(c_r)
                     );
                 }
-                // Insert raw CPs into cache
-                critical_pair_cache.insert(key, cp.clone());
 
                 // simplify using R
                 let simpl_cp = cp
@@ -721,8 +719,8 @@ fn main() {
                     .filter(|(l, r)| {
                         // only keep if not trivial
                         l != r
-                        && !kbe.E.iter().any(|eq| sameeq(eq, &(l.clone(), r.clone())))
-                        && !kbe.R.iter().any(|rule| sameeq(rule, &(l.clone(), r.clone())))
+                        && !kbe.E.iter().any(|eq| sameeq_ref((&eq.0,&eq.1), (l, r)))
+                        && !kbe.R.iter().any(|rule| sameeq_ref((&rule.0,&rule.1), (l, r)))
                         // && !kbe.E.contains(&(l.clone(), r.clone())) 
                         // && !kbe.E.contains(&(r.clone(), l.clone())) 
                         // && !kbe.R.iter().any(|(l_r, r_r)| (l == l_r && r == r_r) || (l == r_r && r == l_r))
@@ -739,6 +737,7 @@ fn main() {
                         strterm(simpl_r)
                     );
                 }
+                critical_pair_cache.insert(key, simpl_cp.clone());
                 cps.extend(simpl_cp);
             }
         }
@@ -750,7 +749,7 @@ fn main() {
         // for each node in C, search if a cps applies, count how often
         let mut counted_cps = cps
             .iter()
-            .cloned()
+            // .cloned()
 
             // dedup for testing, TODO: should not be necessary
             .collect::<HashSet<_>>()
@@ -820,7 +819,7 @@ fn main() {
         let top_cps = counted_cps
             .into_iter()
             .take(5)
-            .map(|(cp, _)| cp.clone())
+            .map(|(cp, _)| cp)
             // .map(|((l,r), _)| (l.clone(), r.clone()))
             .collect::<Vec<_>>();
         
@@ -830,7 +829,7 @@ fn main() {
         for (l, r) in top_cps.iter() {
             println!("  {} = {}", strterm(l), strterm(r));
         }
-        kbe.E.extend(top_cps);
+        kbe.E.extend(top_cps.into_iter().map(|(l, r)| (l.clone(), r.clone())));
 
         #[cfg(debug_assertions)]
         println!("Rules before KBC:");

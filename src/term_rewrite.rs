@@ -369,6 +369,21 @@ pub fn sameeq(eq1: &Equation, eq2: &Equation) -> bool {
         && collate(l_prime, r).is_some())
 }
 
+
+pub fn sameeq_ref(eq1: (&Term, &Term), eq2: (&Term, &Term)) -> bool {
+    let (l, r) = eq1;
+    let (l_prime, r_prime) = eq2;
+    (collate(l, l_prime).is_some()
+        && collate(r, r_prime).is_some()
+        && collate(l_prime, l).is_some()
+        && collate(r_prime, r).is_some())
+        ||
+    (collate(l, r_prime).is_some()
+        && collate(r, l_prime).is_some()
+        && collate(r_prime, l).is_some()
+        && collate(l_prime, r).is_some())
+}
+
 /// [distincteqs eqs] returns a list of equations with duplicate (i.e. equivalent)
 /// equations removed.
 pub fn distincteqs(eqs: Vec<Equation>) -> Vec<Equation> {
