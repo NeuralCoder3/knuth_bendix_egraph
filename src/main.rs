@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::stdout;
 use std::io::Write;
+use std::time::Duration;
+use std::time::Instant;
 use symbol_table::GlobalSymbol;
 
 use crate::kbo::*;
@@ -579,6 +581,8 @@ fn main() {
 
     let mut current_result = None;
     let mut achieved_time = None;
+    let mut step31_total = std::time::Duration::from_secs(0);
+    let mut step32_total = std::time::Duration::from_secs(0);
     // Global critical pair cache across iterations, keyed by owned rule content
     let mut critical_pair_cache: HashMap<((Term, Term), (Term, Term)), Vec<(Term, Term)>> = HashMap::new();
 
@@ -625,6 +629,7 @@ fn main() {
 
         #[cfg(debug_assertions)]
         println!("Simplify DAG.");
+        let step31_start = std::time::Instant::now();
         let new_rules = simplify_dag_var(&lpo, &mut kbe); 
         #[cfg(debug_assertions)]
         println!("New rules:");
@@ -634,9 +639,11 @@ fn main() {
         // however, rules are not considered in mutual simplification => need first be added to E
         // 3.2 will take care of the simplification
         kbe.E.extend(new_rules);
+        step31_total += step31_start.elapsed();
 
         // Step 3.2 (KBO: Add critical pairs)
         // TODO: keep previous critical pairs instead of complete recomputation
+        let step32_start = std::time::Instant::now();
         let mut cps = vec![];
 
         {
@@ -646,6 +653,7 @@ fn main() {
             rules.extend(kbe.E.iter().map(|(l, r)| (l, r)));
             rules.extend(kbe.E.iter().map(|(l, r)| (r, l)));
             // Use the global cache across iterations
+            let step32_start = std::time::Instant::now();
             // Per-iteration normalization cache used by linorm_cached
             let mut norm_cache: HashMap<Term, Term> = HashMap::new();
             let mut normalize = |t: &Term| -> Term { linorm_cached(&kbe.R, t, &mut norm_cache) };
@@ -830,6 +838,7 @@ fn main() {
             println!("  {} = {}", strterm(l), strterm(r));
         }
         kbe.E.extend(top_cps.into_iter().map(|(l, r)| (l.clone(), r.clone())));
+        step32_total += step32_start.elapsed();
 
         #[cfg(debug_assertions)]
         println!("Rules before KBC:");
@@ -863,7 +872,12 @@ fn main() {
             current_result = Some(t_prime_str);
             achieved_time = Some(start_time.elapsed());
         }
-        println!("Time elapsed: {:.2?}", start_time.elapsed());
+        println!(
+            "Time elapsed: {:.2?} ({:.2?} | {:.2?})",
+            start_time.elapsed(),
+            step31_total,
+            step32_total
+        );
         if let Some(achieved_time) = achieved_time {
             println!("Achieved after: {:.2?}", achieved_time);
         }
