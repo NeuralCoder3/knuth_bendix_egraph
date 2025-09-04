@@ -646,14 +646,9 @@ fn main() {
             rules.extend(kbe.E.iter().map(|(l, r)| (l, r)));
             rules.extend(kbe.E.iter().map(|(l, r)| (r, l)));
             // Use the global cache across iterations
-            // Per-iteration normalization memoization to speed up repeated linorm calls
+            // Per-iteration normalization cache used by linorm_cached
             let mut norm_cache: HashMap<Term, Term> = HashMap::new();
-            let mut normalize = |t: &Term| -> Term {
-                if let Some(n) = norm_cache.get(t) { return n.clone(); }
-                let n = linorm(&kbe.R, t);
-                norm_cache.insert(t.clone(), n.clone());
-                n
-            };
+            let mut normalize = |t: &Term| -> Term { linorm_cached(&kbe.R, t, &mut norm_cache) };
         // let rules = kbe.R.iter().flat_map(|(l, r)| {
         //     vec![
         //         (l.clone(), r.clone()), // add original rule

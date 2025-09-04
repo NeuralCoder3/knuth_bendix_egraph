@@ -1,4 +1,5 @@
 use symbol_table::GlobalSymbol;
+use std::collections::HashMap;
 
 use crate::types::*;
 use crate::util::*;
@@ -144,6 +145,60 @@ pub fn linorm(rs: &RuleSet, t: &Term) -> Term {
             linormtop(rs, rs, &Term::Function(f.clone(), new_ts))
         }
     }
+}
+
+/// Cached versions of normalization to avoid repeated work on identical subterms
+pub fn linormtop_cached(
+    rs: &RuleSet,
+    sub_rs: &[Rule],
+    t: &Term,
+    cache: &mut HashMap<Term, Term>,
+) -> Term {
+    if let Some(n) = cache.get(t) { return n.clone(); }
+    let result = if sub_rs.is_empty() {
+        t.clone()
+    } else {
+        let (l, r) = &sub_rs[0];
+        if let Some(s) = collate(l, t) {
+            linormsubst_cached(rs, &s, r, cache)
+        } else {
+            linormtop_cached(rs, &sub_rs[1..], t, cache)
+        }
+    };
+    cache.insert(t.clone(), result.clone());
+    result
+}
+
+pub fn linormsubst_cached(
+    rs: &RuleSet,
+    s: &SubstitutionSet,
+    t: &Term,
+    cache: &mut HashMap<Term, Term>,
+) -> Term {
+    match t {
+        Term::Variable(_) => subst(s, t),
+        Term::Function(f, ts) => {
+            let mapped = ts
+                .iter()
+                .map(|t| linormsubst_cached(rs, s, t, cache))
+                .collect();
+            let new_term = Term::Function(f.clone(), mapped);
+            linormtop_cached(rs, rs, &new_term, cache)
+        }
+    }
+}
+
+pub fn linorm_cached(rs: &RuleSet, t: &Term, cache: &mut HashMap<Term, Term>) -> Term {
+    if let Some(n) = cache.get(t) { return n.clone(); }
+    let result = match t {
+        Term::Variable(_) => linormtop_cached(rs, rs, t, cache),
+        Term::Function(f, ts) => {
+            let new_ts = ts.iter().map(|t| linorm_cached(rs, t, cache)).collect();
+            linormtop_cached(rs, rs, &Term::Function(f.clone(), new_ts), cache)
+        }
+    };
+    cache.insert(t.clone(), result.clone());
+    result
 }
 
 //
