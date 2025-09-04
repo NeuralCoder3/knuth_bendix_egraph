@@ -288,7 +288,7 @@ pub fn distincteqs(eqs: Vec<Equation>) -> Vec<Equation> {
 
 /// [var x] creates a variable named [x] with index 0.
 pub fn var(x: &str) -> Term {
-    Term::Variable(VarSym(x.to_string(), 0))
+    Term::Variable(VarSym(GlobalSymbol::from(x), 0))
 }
 
 /// [const_ c] creates a constant (a function symbol with no arguments).
@@ -467,7 +467,7 @@ pub fn parsevar(exp: &str) -> Term {
     if s.is_empty() {
         panic!("ParseError")
     } else {
-        Term::Variable(VarSym(parsevarsym(s), 0))
+        Term::Variable(VarSym(GlobalSymbol::from(parsevarsym(s)), 0))
     }
 }
 
@@ -558,7 +558,7 @@ pub fn parseeqs(ls: Vec<&str>) -> EquationSet {
 /// [strterm t] returns a string representation of [t].
 pub fn strterm(t: &Term) -> String {
     match t {
-        Term::Variable(VarSym(x, i)) if *i == 0 => x.clone(),
+        Term::Variable(VarSym(x, i)) if *i == 0 => x.to_string(),
         Term::Variable(VarSym(x, i)) => format!("{}_{}", x, i),
         Term::Function(f, ts) => {
             if ts.is_empty() {

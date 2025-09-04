@@ -58,8 +58,6 @@ where
     let mut changed = true;
     let mut new_state = state;
     while changed {
-        changed = false;
-        
         // println!("\n  Knuth-Bendix step:");
         // println!("Rules:");
         // printrules(&new_state.0);
@@ -87,19 +85,24 @@ struct ENode {
 type Id = usize;
 
 #[allow(non_snake_case)]
-struct KBEGraph {
+struct KBEDAG {
     C: BiMap<Id, ENode>, // can be done as Vec<ENode> with id as index, and an additional C_inv
     id_count: usize,
-    E: EquationSet,
-    R: RuleSet,
     // replacement_set: old_id -> new_id (old_id no longer exists in C)
     S: HashMap<Id, Id>, // used to keep track of replacements
+}
+
+#[allow(non_snake_case)]
+struct KBEGraph {
+    dag: KBEDAG,
+    E: EquationSet,
+    R: RuleSet,
 }
 
 /*
     insert a term into the KBE graph
 */
-fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
+fn insert_term(t: &Term, kbe: &mut KBEDAG) -> Id {
     match t {
         Term::Variable(var) => {
             panic!("Cannot insert variable into KBE graph: {:?}", var);
@@ -116,7 +119,7 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
                 children,
             };
             if let Some(id) = kbe.C.get_by_right(&node) {
-                return id.clone();
+                return *id;
             }
             let id = kbe.id_count;
             kbe.id_count += 1;
@@ -126,7 +129,7 @@ fn insert_term(t: &Term, kbe: &mut KBEGraph) -> Id {
     }
 }
 
-fn extract_term(kbe: &KBEGraph, id: Id) -> Term {
+fn extract_term(kbe: &KBEDAG, id: Id) -> Term {
     let node = kbe.C.get_by_left(&resolve_id(kbe, id)).unwrap();
     let mut children = vec![];
     for child in node.children.iter() {
@@ -136,12 +139,12 @@ fn extract_term(kbe: &KBEGraph, id: Id) -> Term {
     Term::Function(node.label, children)
 }
 
-fn match_rule_var(kbe: &KBEGraph, left: &Term, node_id: Id) -> bool {
+fn match_rule_var(kbe: &KBEDAG, left: &Term, node_id: Id) -> bool {
     match_rule_var_subst(kbe, left, node_id, &mut vec![])
 }
 
 fn match_rule_var_subst(
-    kbe: &KBEGraph,
+    kbe: &KBEDAG,
     left: &Term,
     node_id: Id,
     subst: &mut Vec<(VarSym, Id)>,
@@ -176,7 +179,8 @@ fn match_rule_var_subst(
     }
 }
 
-fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
+fn subst_node(kbe: &KBEDAG, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
+    // We might need the original term => keep it and only read it
     match t {
         Term::Variable(xi) => {
             if let Some((_, id)) = ss.iter().find(|(var, _)| var == xi) {
@@ -184,10 +188,11 @@ fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
                 extract_term(kbe, *id)
             } else {
                 t.clone() // no substitution, return original term
+                // Term::Variable(xi)
             }
         }
         Term::Function(f, ts) => {
-            let new_ts = ts.iter().map(|t| subst_node(kbe, ss, t)).collect();
+            let new_ts = ts.into_iter().map(|t| subst_node(kbe, ss, t)).collect();
             Term::Function(f.clone(), new_ts)
         }
     }
@@ -195,7 +200,7 @@ fn subst_node(kbe: &KBEGraph, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
 
 fn apply_rules_var<F>(
     lpo: &F,
-    kbe: &mut KBEGraph,
+    kbe: &mut KBEDAG,
     rules: &RuleSet,  // grounded rules
     both_sides: bool, // check reversed side for ground equations to add to rule set
 ) -> RuleSet
@@ -204,26 +209,26 @@ where
 {
     let mut applied = vec![];
 
-    let rules = if both_sides {
+    let rules : Vec<(&Term, &Term)> = if both_sides {
         rules
             .iter()
             .flat_map(|(l, r)| {
                 vec![
-                    (l.clone(), r.clone()), // add original rule
-                    (r.clone(), l.clone()), // add reversed rule
+                    (l, r), // add original rule
+                    (r, l), // add reversed rule
                 ]
             })
-            .collect::<RuleSet>()
+            .collect::<>()
     } else {
         rules
             .iter()
-            .map(|(l, r)| (l.clone(), r.clone()))
-            .collect::<RuleSet>()
+            .map(|(l, r)| (l, r))
+            .collect::<>()
     };
 
     for (l, r) in rules.iter() {
         // for id in kbe.C.left_values() {
-        let ids = kbe.C.iter().map(|(id, _)| id.clone());
+        let ids = kbe.C.iter().map(|(id, _)| *id);
 
         let mut rewrites = vec![];
         #[cfg(debug_assertions)]
@@ -246,13 +251,13 @@ where
                 );
 
 
-            #[cfg(debug_assertions)] { println!("DBG2: Subst l"); stdout().flush().unwrap(); }
+                #[cfg(debug_assertions)] { println!("DBG2: Subst l"); stdout().flush().unwrap(); }
                 // TODO: l_inst could be extract
                 let l_inst = subst_node(kbe, &subst, l);
                 // TODO: the extract and embed is unecessary and expensive!
-            #[cfg(debug_assertions)] { println!("DBG2: Subst r"); stdout().flush().unwrap(); }
+                #[cfg(debug_assertions)] { println!("DBG2: Subst r"); stdout().flush().unwrap(); }
                 let r_inst = subst_node(kbe, &subst, r);
-            #[cfg(debug_assertions)] { println!("DBG2: Substed: {:?} -> {:?}", strterm(&l_inst), strterm(&r_inst)); stdout().flush().unwrap(); }
+                #[cfg(debug_assertions)] { println!("DBG2: Substed: {:?} -> {:?}", strterm(&l_inst), strterm(&r_inst)); stdout().flush().unwrap(); }
 
                 debug_assert!(extract_term(kbe, id) == l_inst);
 
@@ -265,8 +270,8 @@ where
                 // TODO: lpo is bottleneck
                 if lpo(&l_inst, &r_inst) {
             #[cfg(debug_assertions)] { println!("Before Clone"); stdout().flush().unwrap(); }
-                    rewrites.push((id, r_inst.clone()));
-                    applied.push((l_inst, r_inst));
+                    rewrites.push((id, l_inst, r_inst));
+                    // applied.push((l_inst, r_inst));
                 }else {
                     applied.push((r_inst, l_inst));
                 }
@@ -276,7 +281,7 @@ where
 
         // To avoid overlapping rewrites:
         let mut already_replaced = std::collections::HashSet::new();
-        for (id, r) in rewrites {
+        for (id, l,r) in rewrites {
             #[cfg(debug_assertions)]
             println!(
                 "DBG: Replace node {} with new term {} (previously {})",
@@ -305,6 +310,7 @@ where
             );
             kbe.S.insert(id, r_id);
             already_replaced.insert(id);
+            applied.push((l, r));
         }
     }
     return applied;
@@ -323,11 +329,12 @@ where
     // => no need to add
     apply_rules_var(
         lpo,
-        kbe,
-        &kbe.R
-            .iter()
-            .map(|(l, r)| (l.clone(), r.clone()))
-            .collect::<Vec<_>>(),
+        &mut kbe.dag,
+        &kbe.R,
+        // &kbe.R
+        //     .iter()
+        //     .map(|(l, r)| (l.clone(), r.clone()))
+        //     .collect::<Vec<_>>(),
         false,
     );
     // #[cfg(debug_assertions)]
@@ -345,17 +352,18 @@ where
     println!("Apply E-rules");
     new_rules.extend(apply_rules_var(
         lpo,
-        kbe,
-        &kbe.E
-            .iter()
-            .map(|(l, r)| (l.clone(), r.clone()))
-            .collect::<Vec<_>>(),
+        &mut kbe.dag,
+        &kbe.E,
+        // &kbe.E
+            // .iter()
+            // .map(|(l, r)| (l.clone(), r.clone()))
+            // .collect::<Vec<_>>(),
         true,
     ));
     return new_rules;
 }
 
-fn resolve_id(kbe: &KBEGraph, id: Id) -> Id {
+fn resolve_id(kbe: &KBEDAG, id: Id) -> Id {
     let mut id = id;
     while let Some(real_id) = kbe.S.get(&id) {
         id = *real_id;
@@ -427,11 +435,13 @@ fn main() {
     let args = Args::parse();
 
     let mut kbe = KBEGraph {
-        C: BiMap::new(),
-        id_count: 0,
+        dag: KBEDAG { 
+            C: BiMap::new(),
+            id_count: 0,
+            S: HashMap::new(),
+        },
         E: vec![],
         R: vec![],
-        S: HashMap::new(),
     };
 
     // Determine rule file path
@@ -468,16 +478,16 @@ fn main() {
         parseterm(&term_arg)
     };
 
-    let t_id = insert_term(&t, &mut kbe);
-    let mut ids = kbe.C.left_values().cloned().collect::<Vec<_>>();
+    let t_id = insert_term(&t, &mut kbe.dag);
+    let mut ids = kbe.dag.C.left_values().cloned().collect::<Vec<_>>();
     ids.sort();
     #[cfg(debug_assertions)]
     for id in ids.iter() {
-        let node = kbe.C.get_by_left(id).unwrap();
+        let node = kbe.dag.C.get_by_left(id).unwrap();
         println!(
             "  {}: {} ({}({}))",
             id,
-            strterm(&extract_term(&kbe, *id)),
+            strterm(&extract_term(&kbe.dag, *id)),
             node.label,
             node.children
                 .iter()
@@ -578,15 +588,15 @@ fn main() {
         println!("Iteration {}", i);
         #[cfg(debug_assertions)]
         println!("DAG:");
-        let mut ids = kbe.C.left_values().cloned().collect::<Vec<_>>();
+        let mut ids = kbe.dag.C.left_values().cloned().collect::<Vec<_>>();
         ids.sort();
         #[cfg(debug_assertions)]
         for id in ids.iter() {
-            let node = kbe.C.get_by_left(id).unwrap();
+            let node = kbe.dag.C.get_by_left(id).unwrap();
             println!(
                 "  {}: {} ({}({}))",
                 id,
-                strterm(&extract_term(&kbe, *id)),
+                strterm(&extract_term(&kbe.dag, *id)),
                 node.label,
                 node.children
                     .iter()
@@ -730,15 +740,15 @@ fn main() {
                     Term::Function(_, _) => false,
                 };
                 if !is_var_l {
-                    for id in kbe.C.left_values() {
-                        if match_rule_var(&kbe, &l, *id) {
+                    for id in kbe.dag.C.left_values() {
+                        if match_rule_var(&kbe.dag, &l, *id) {
                             count += 1;
                         }
                     }
                 }
                 if !is_var_r {
-                    for id in kbe.C.left_values() {
-                        if match_rule_var(&kbe, &r, *id) {
+                    for id in kbe.dag.C.left_values() {
+                        if match_rule_var(&kbe.dag, &r, *id) {
                             count += 1;
                         }
                     }
@@ -817,8 +827,8 @@ fn main() {
         let t_prime = linorm(&kbe.R, &t);
         let t_prime_str = strterm(&t_prime);
         println!("{}", t_prime_str);
-        
-        let t_extract = extract_term(&kbe, t_id);
+
+        let t_extract = extract_term(&kbe.dag, t_id);
         println!("Extracted term:");
         println!("{}", strterm(&t_extract));
 

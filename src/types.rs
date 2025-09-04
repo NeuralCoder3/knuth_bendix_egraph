@@ -5,7 +5,7 @@ use symbol_table::GlobalSymbol;
 
 pub type FunSym = GlobalSymbol;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct VarSym(pub String, pub i32);
+pub struct VarSym(pub GlobalSymbol, pub i32);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Term {
     Variable(VarSym),
