@@ -579,7 +579,8 @@ fn main() {
 
     let mut current_result = None;
     let mut achieved_time = None;
-    let mut critical_pair_cache : HashMap<(&Rule, &Rule), Vec<(Term,Term)>> = HashMap::new();
+    // Global critical pair cache across iterations, keyed by owned rule content
+    let mut critical_pair_cache: HashMap<((Term, Term), (Term, Term)), Vec<(Term, Term)>> = HashMap::new();
 
     // Step 3 (loop)
     for i in 0..args.iterations {
@@ -640,10 +641,19 @@ fn main() {
 
         {
             // let rules = kbe.R.clone();
-            let mut rules = kbe.R.clone();
+            let mut rules = kbe.R.iter().map(|(l, r)| (l, r)).collect::<Vec<_>>();
             // R + E in both direction
-            rules.extend(kbe.E.iter().map(|(l, r)| (l.clone(), r.clone())));
-            rules.extend(kbe.E.iter().map(|(l, r)| (r.clone(), l.clone())));
+            rules.extend(kbe.E.iter().map(|(l, r)| (l, r)));
+            rules.extend(kbe.E.iter().map(|(l, r)| (r, l)));
+            // Use the global cache across iterations
+            // Per-iteration normalization memoization to speed up repeated linorm calls
+            let mut norm_cache: HashMap<Term, Term> = HashMap::new();
+            let mut normalize = |t: &Term| -> Term {
+                if let Some(n) = norm_cache.get(t) { return n.clone(); }
+                let n = linorm(&kbe.R, t);
+                norm_cache.insert(t.clone(), n.clone());
+                n
+            };
         // let rules = kbe.R.iter().flat_map(|(l, r)| {
         //     vec![
         //         (l.clone(), r.clone()), // add original rule
@@ -656,9 +666,28 @@ fn main() {
                 if i > j {
                     continue; // only consider pairs once
                 }
-                // TODO: use i,j as indices instead of terms
-                if let Some(cached) = critical_pair_cache.get(&(rule1,rule2)) {
-                    cps.extend(cached.clone());
+                // Use owned Term pairs as cache key so mutations to rule sets don't affect identity
+                let key = (
+                    (rule1.0.clone(), rule1.1.clone()),
+                    (rule2.0.clone(), rule2.1.clone())
+                );
+                if let Some(cached_raw_cp) = critical_pair_cache.get(&key) {
+                    // Re-simplify cached raw CPs using the current R and filter against current R/E
+                    let simpl_cp = cached_raw_cp
+                        .iter()
+                        .cloned()
+                        .map(|(l, r)| {
+                            let l_prime = normalize(&l);
+                            let r_prime = normalize(&r);
+                            (l_prime, r_prime)
+                        })
+                        .filter(|(l, r)| {
+                            l != r
+                            && !kbe.E.iter().any(|eq| sameeq(eq, &(l.clone(), r.clone())))
+                            && !kbe.R.iter().any(|rule| sameeq(rule, &(l.clone(), r.clone())))
+                        })
+                        .collect::<Vec<_>>();
+                    cps.extend(simpl_cp);
                     continue;
                 }
 
@@ -670,7 +699,8 @@ fn main() {
                     strterm(&rule2.0),
                     strterm(&rule2.1)
                 );
-                let cp = critical_pair(rule1, rule2);
+                let cp = critical_pair_ref((rule1.0, rule1.1), (rule2.0, rule2.1));
+                // let cp = critical_pair(&key.0, &key.1);
                 #[cfg(debug_assertions)]
                 for (c_l, c_r) in cp.iter() {
                     println!(
@@ -679,12 +709,15 @@ fn main() {
                         strterm(c_r)
                     );
                 }
+                // Insert raw CPs into cache
+                critical_pair_cache.insert(key, cp.clone());
+
                 // simplify using R
                 let simpl_cp = cp
                     .into_iter()
                     .map(|(l, r)| {
-                        let l_prime = linorm(&kbe.R, &l);
-                        let r_prime = linorm(&kbe.R, &r);
+                        let l_prime = normalize(&l);
+                        let r_prime = normalize(&r);
 
                         // normalize variables
 

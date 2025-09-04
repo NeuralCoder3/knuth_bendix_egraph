@@ -190,6 +190,17 @@ pub fn critical_pair(rule1: &Rule, rule2: &Rule) -> Vec<(Term, Term)> {
     remove_symmetric_duplicates(pairs)
 }
 
+pub fn critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec<(Term, Term)> {
+    // Assume that `uniquevar` takes a pair of rules and returns a pair with variables renamed apart.
+    let (rule1_prime, rule2_prime) = uniquevar_ref(rule1, rule2);
+    let (l1, r1) = &rule1_prime;
+    let (l2, r2) = &rule2_prime;
+    let mut pairs = Vec::new();
+    pairs.extend(apply_cp_subst(r1, critical_pair_parts(l1, &rule2_prime)));
+    pairs.extend(apply_cp_subst(r2, critical_pair_parts(l2, &rule1_prime)));
+    remove_symmetric_duplicates(pairs)
+}
+
 //
 // Lexicographic Path Ordering (LPO)
 //

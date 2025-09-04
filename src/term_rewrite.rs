@@ -187,6 +187,28 @@ pub fn uniquevarstep(
     }
 }
 
+
+pub fn uniquevarstep_ref(
+    xis: &Vec<VarSym>,
+    x_i: &VarSym,
+    n: i32,
+    ru: (&Term, &Term),
+) -> ((Term,Term), Vec<VarSym>) {
+    let candidate = VarSym(x_i.0.clone(), n);
+    if xis.contains(&candidate) {
+        uniquevarstep_ref(xis, x_i, n + 1, ru)
+    } else {
+        let (l, r) = ru;
+        let new_l = rename(&(x_i.clone(), candidate.clone()), l);
+        let new_r = rename(&(x_i.clone(), candidate.clone()), r);
+        let new_rule = (new_l, new_r);
+        let mut new_xis = xis.clone();
+        new_xis.push(candidate);
+        new_xis = subtraction(new_xis, vec![x_i.clone()]);
+        (new_rule, new_xis)
+    }
+}
+
 /// [uniquevarsub xis ins ru] renames all variables in [ins] (that occur in [ru]) so that
 /// they are distinct from those in [xis].
 pub fn uniquevarsub(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: Rule) -> Rule {
@@ -194,6 +216,18 @@ pub fn uniquevarsub(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: Rule) -> Rule {
     for xi in ins {
         let (new_rule, new_xis) = uniquevarstep(&xis, &xi, 0, &rule_current);
         rule_current = new_rule;
+        xis = new_xis;
+    }
+    rule_current
+}
+
+pub fn uniquevarsub_ref(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: (&Term, &Term)) -> Rule {
+    // let mut rule_current = ru;
+    let mut rule_current = (ru.0.clone(), ru.1.clone());
+    for xi in ins {
+        // let (new_rule, new_xis) = uniquevarstep_ref(&xis, &xi, 0, rule_current);
+        let (new_rule, new_xis) = uniquevarstep(&xis, &xi, 0, &rule_current);
+        rule_current = (new_rule.0, new_rule.1);
         xis = new_xis;
     }
     rule_current
@@ -208,6 +242,16 @@ pub fn uniquevar(ru: &Rule, ru_prime: &Rule) -> (Rule, Rule) {
     let ins = intersection(uni.clone(), union(vars(l_prime), vars(r_prime)));
     let new_ru_prime = uniquevarsub(uni, ins, ru_prime.clone());
     (ru.clone(), new_ru_prime)
+}
+
+pub fn uniquevar_ref(ru: (&Term, &Term), ru_prime: (&Term, &Term)) -> (Rule, Rule) {
+    let (l, r) = ru;
+    let (l_prime, r_prime) = ru_prime;
+    let uni = union(vars(l), vars(r));
+    let ins = intersection(uni.clone(), union(vars(l_prime), vars(r_prime)));
+    let new_ru_prime = uniquevarsub_ref(uni, ins, ru_prime.clone());
+    let new_ru = (l.clone(), r.clone());
+    (new_ru, new_ru_prime)
 }
 
 /// [decvarsubstep uni x_i n ru] attempts to “de‐generalize” a variable’s index.
