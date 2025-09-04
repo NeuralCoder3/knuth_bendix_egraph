@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use either::Either;
 use once_cell::sync::Lazy;
 
 
@@ -327,7 +328,8 @@ fn rule_complexity(rule: &Rule) -> usize {
 pub fn orient_equation<F>(
     lpo: &F,
     state: (RuleSet, EquationSet),
-) -> Result<(Rule, RuleSet, EquationSet), CompletionFailed>
+) -> Either<(Rule, RuleSet, EquationSet), (RuleSet, EquationSet)>
+// Result<(Rule, RuleSet, EquationSet), CompletionFailed>
 where
     F: Fn(&Term, &Term) -> bool,
 {
@@ -338,7 +340,8 @@ where
         .filter(|(l, r)| lpo(l, r) || lpo(r, l))
         .collect();
     if orientable.is_empty() {
-        return Err(CompletionFailed);
+        // return Err(CompletionFailed);
+        return Either::Right((rules, eqs));
     }
     let chosen = orientable
         .into_iter()
@@ -357,7 +360,8 @@ where
         (r.clone(), l.clone())
     };
     let new_eqs: EquationSet = eqs.into_iter().filter(|e| *e != chosen).collect();
-    Ok((new_rule, rules, new_eqs))
+    // Ok((new_rule, rules, new_eqs))
+    Either::Left((new_rule, rules, new_eqs))
 }
 
 /// Normalizes the right–hand sides of `rules` using the new rule `r`.
@@ -447,7 +451,7 @@ fn completion_step<F>(
 where
     F: Fn(&Term, &Term) -> bool,
 {
-    let oriented = orient_equation(lpo, state).expect("CompletionFailed");
+    let oriented = orient_equation(lpo, state).left().unwrap();
     let composed = compose(oriented);
     let deduced = deduce_critical_pairs(composed);
     // let collapsed = collapse(lpo,deduced);

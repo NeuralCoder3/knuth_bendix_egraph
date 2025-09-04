@@ -15,15 +15,16 @@ use crate::kbo::*;
 use crate::term_rewrite::*;
 use crate::types::*;
 
-fn knuth_steps<F>(verbose: bool, lpo: &F, state: &(RuleSet, EquationSet)) -> (RuleSet, EquationSet)
+fn knuth_steps<F>(verbose: bool, lpo: &F, state: (RuleSet, EquationSet)) -> (bool,(RuleSet, EquationSet))
 where
     F: Fn(&Term, &Term) -> bool,
 {
     // Orient, Compose, collapse => if orientable and new rule used
     // simplify, remove trivial => always
+    let orient_result = orient_equation(lpo, state);
 
-    let copy = state.clone();
-    if let Ok(oriented) = orient_equation(lpo, copy) {
+    if orient_result.is_left() {
+        let oriented = orient_result.left().unwrap();
         let composed = compose(oriented);
         // println!("Composed:");
         // printrule(&composed.0);
@@ -39,12 +40,14 @@ where
         let added = add_rule(composed);
         let simplified = simplify(added);
         let removed = remove_trivial(verbose, simplified);
-        removed
+        (true, removed)
     } else {
+        let state = orient_result.right().unwrap();
         let copy = state.clone();
-        let simplified = simplify(copy);
+        let simplified = simplify(state);
         let removed = remove_trivial(verbose, simplified);
-        removed
+        let changed = removed != copy;
+        (changed, removed)
     }
 }
 
@@ -63,11 +66,13 @@ where
         // println!("Equations:");
         // printeqs(&new_state.1);
 
-        let new_state_prime = knuth_steps(verbose, lpo, &new_state);
-        if new_state != new_state_prime {
-            changed = true;
-            new_state = new_state_prime;
-        }
+        let (changed_prime, new_state_prime) = knuth_steps(verbose, lpo, new_state);
+        changed = changed_prime;
+        new_state = new_state_prime;
+        // if new_state != new_state_prime {
+        //     changed = true;
+        //     new_state = new_state_prime;
+        // }
     }
     println!();
     new_state
@@ -715,23 +720,36 @@ fn main() {
             .map(|cp| {
                 let (l, r) = cp;
                 let mut count = 0;
-                for (id, _) in kbe.C.iter() {
-                    // TODO: need to match ground instance
-                    // TODO: we do not want to match on variable only right side
-                    let is_var_l = match l {
-                        Term::Variable(_) => true, // do not match on variable
-                        Term::Function(_, _) => false,
-                    };
-                    let is_var_r = match r {
-                        Term::Variable(_) => true, // do not match on variable
-                        Term::Function(_, _) => false,
-                    };
-                    let match_left = match_rule_var(&kbe, &l, *id);
-                    let match_right = match_rule_var(&kbe, &r, *id);
-                    if (!is_var_l && match_left) || (!is_var_r && match_right) {
-                        count += 1;
+                // we do not want to match on variable only right side
+                let is_var_l = match l {
+                    Term::Variable(_) => true, // do not match on variable
+                    Term::Function(_, _) => false,
+                };
+                let is_var_r = match r {
+                    Term::Variable(_) => true, // do not match on variable
+                    Term::Function(_, _) => false,
+                };
+                if !is_var_l {
+                    for id in kbe.C.left_values() {
+                        if match_rule_var(&kbe, &l, *id) {
+                            count += 1;
+                        }
                     }
                 }
+                if !is_var_r {
+                    for id in kbe.C.left_values() {
+                        if match_rule_var(&kbe, &r, *id) {
+                            count += 1;
+                        }
+                    }
+                }
+                // for (id, _) in kbe.C.iter() {
+                //     let match_left = match_rule_var(&kbe, &l, *id);
+                //     let match_right = match_rule_var(&kbe, &r, *id);
+                //     if (!is_var_l && match_left) || (!is_var_r && match_right) {
+                //         count += 1;
+                //     }
+                // }
 
                 let mut rule_count = 0;
                 for (l_rule, r_rule) in kbe.R.iter() {
