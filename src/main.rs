@@ -653,7 +653,6 @@ fn main() {
             rules.extend(kbe.E.iter().map(|(l, r)| (l, r)));
             rules.extend(kbe.E.iter().map(|(l, r)| (r, l)));
             // Use the global cache across iterations
-            let step32_start = std::time::Instant::now();
             // Per-iteration normalization cache used by linorm_cached
             let mut norm_cache: HashMap<Term, Term> = HashMap::new();
             let mut normalize = |t: &Term| -> Term { linorm_cached(&kbe.R, t, &mut norm_cache) };
@@ -678,7 +677,7 @@ fn main() {
                     // Re-simplify cached raw CPs using the current R and filter against current R/E
                     let simpl_cp = cached_raw_cp
                         .iter()
-                        .cloned()
+                        // .cloned()
                         .map(|(l, r)| {
                             let l_prime = normalize(&l);
                             let r_prime = normalize(&r);
