@@ -1,5 +1,6 @@
 use symbol_table::GlobalSymbol;
-use std::collections::HashMap;
+// use std::collections::HashMap;
+use hashbrown::HashMap;
 
 use crate::types::*;
 use crate::util::*;

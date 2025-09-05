@@ -5,8 +5,10 @@ mod util;
 
 use bimap::BiMap;
 use clap::Parser;
-use std::collections::HashMap;
-use std::collections::HashSet;
+// use std::collections::HashMap;
+// use std::collections::HashSet;
+use hashbrown::HashSet;
+use hashbrown::HashMap;
 use std::io::stdout;
 use std::io::Write;
 use std::time::Duration;
@@ -282,7 +284,7 @@ where
         }
 
         // To avoid overlapping rewrites:
-        let mut already_replaced = std::collections::HashSet::new();
+        let mut already_replaced = HashSet::new();
         for (id, l,r) in rewrites {
             #[cfg(debug_assertions)]
             println!(
@@ -674,15 +676,16 @@ fn main() {
                     (rule2.0.clone(), rule2.1.clone())
                 );
                 if let Some(cached_raw_cp) = critical_pair_cache.get(&key) {
+                    // cps.extend(cached_raw_cp.clone());
                     // Re-simplify cached raw CPs using the current R and filter against current R/E
                     let simpl_cp = cached_raw_cp
                         .iter()
-                        // .cloned()
-                        .map(|(l, r)| {
-                            let l_prime = normalize(&l);
-                            let r_prime = normalize(&r);
-                            (l_prime, r_prime)
-                        })
+                        .cloned()
+                        // .map(|(l, r)| {
+                        //     let l_prime = normalize(&l);
+                        //     let r_prime = normalize(&r);
+                        //     (l_prime, r_prime)
+                        // })
                         .filter(|(l, r)| {
                             l != r
                             && !kbe.E.iter().any(|eq| sameeq(eq, &(l.clone(), r.clone())))
