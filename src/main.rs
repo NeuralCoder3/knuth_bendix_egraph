@@ -160,9 +160,11 @@ fn match_rule_var_subst(
     // instead of term at enode, we can use the enode directly
     // we know enodes are hashed => comparison on enode becomes identity check
     // TODO: operate on enode id
+    let node_id = resolve_id(kbe, node_id);
     match left {
         Term::Variable(x) => {
-            if let Some((_, subst_id)) = subst.iter().find(|(var, _)| var == x) {
+            // println!(" DBG: Unify {:?} with {:?}", x, node_id);
+            if let Some((_, subst_id)) = subst.iter().find(|(var, _)| *var == *x) {
                 // in subst, check if node matches
                 *subst_id == node_id
             } else {
@@ -172,8 +174,8 @@ fn match_rule_var_subst(
             }
         }
         Term::Function(f, ts) => {
-            let node = kbe.C.get_by_left(&resolve_id(kbe, node_id)).unwrap();
-            f == &node.label
+            let node = kbe.C.get_by_left(&node_id).unwrap();
+            *f == node.label
                 && ts.len() == node.children.len()
                 && ts
                     .iter()
@@ -241,7 +243,8 @@ where
         // TODO: we can not invent variables
 
         for id in ids {
-            #[cfg(debug_assertions)] { println!("DBG2: Check Id {:?}", id); stdout().flush().unwrap(); }
+            let id = resolve_id(kbe, id);
+            // #[cfg(debug_assertions)] { println!("DBG2: Check Id {:?}", id); stdout().flush().unwrap(); }
 
             let mut subst = vec![];
             if match_rule_var_subst(kbe, l, id, &mut subst) {
@@ -607,7 +610,7 @@ fn main() {
                 node.label,
                 node.children
                     .iter()
-                    .map(|c| c.to_string())
+                    .map(|c| resolve_id(&kbe.dag, *c).to_string())
                     .collect::<Vec<_>>()
                     .join(", ")
             );

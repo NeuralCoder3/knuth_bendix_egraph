@@ -673,8 +673,8 @@ pub fn parseeqs(ls: Vec<&str>) -> EquationSet {
 /// [strterm t] returns a string representation of [t].
 pub fn strterm(t: &Term) -> String {
     match t {
-        Term::Variable(VarSym(x, i)) if *i == 0 => x.to_string(),
-        Term::Variable(VarSym(x, i)) => format!("{}_{}", x, i),
+        Term::Variable(VarSym(x, i)) if *i == 0 => "?".to_string() + &x.to_string(),
+        Term::Variable(VarSym(x, i)) => format!("?{}_{}", x, i),
         Term::Function(f, ts) => {
             if ts.is_empty() {
                 f.to_string()
