@@ -12,7 +12,22 @@ either = "1.15.0"
 memoize = "0.5.1"
 once_cell = "1.21.3"
 symbol_table = {version = "0.4.0", features = ["global"]}
+parking_lot = "0.12"
+hashbrown = "0.16"
+ahash = "0.8"
 
 [[bin]]
 name = "main"
 path = "src/main.rs"
+
+
+[profile.release]
+debug = "line-tables-only"
+# debug = true
+# cargo install flamegraph
+# cargo flamegraph --release -- math_converted9.rule math_term3.txt -i 30
+# cargo run --release -- math_converted9.rule math_term3.txt -i 30
+# perf record --call-graph dwarf ./target/release/main math_converted9.rule math_term3.txt -i 30
+# Time elapsed: 4.56s (14.87ms | 4.37s)
+# Achieved after: 935.44ms
+# linuxKernel.packages.linux_6_6.perf

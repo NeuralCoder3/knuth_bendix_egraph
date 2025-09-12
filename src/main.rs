@@ -2,6 +2,7 @@ mod kbo;
 mod term_rewrite;
 mod types;
 mod util;
+mod p_parser;
 
 use bimap::BiMap;
 use clap::Parser;
@@ -476,13 +477,48 @@ fn main() {
     };
 
     // Load equations from rule file
-    kbe.E = read_equations(&rule_path);
-
-    // Parse term
-    let t = if std::path::Path::new(&term_arg).is_file() {
-        parseterm(&std::fs::read_to_string(&term_arg).unwrap())
+    let mut conj_term_override: Option<Term> = None;
+    if rule_path.ends_with(".p") {
+        let cnfs = p_parser::parse_p_file(&rule_path);
+        // Convert axioms to equations; conjectures become the input term Eq(Expr1,Expr2)
+        let mut eqs: EquationSet = Vec::new();
+        let mut conj_terms: Vec<Term> = Vec::new();
+        let mut ax_count = 0usize;
+        let mut cj_count = 0usize;
+        for c in cnfs.into_iter() {
+            match c.kind {
+                p_parser::CnfKind::Axiom => { eqs.push(c.equation); ax_count += 1; }
+                p_parser::CnfKind::Conjecture => {
+                    let (l, r) = c.equation;
+                    let eq_fun = symbol_table::GlobalSymbol::from("Eq");
+                    let conj = Term::Function(eq_fun, vec![l, r]);
+                    conj_terms.push(conj);
+                    cj_count += 1;
+                }
+            }
+        }
+        println!("Loaded from .p: {} axioms, {} conjectures", ax_count, cj_count);
+        // Add Eq(x,x) = True
+        let eq_fun = symbol_table::GlobalSymbol::from("Eq");
+        let true_fun = symbol_table::GlobalSymbol::from("True");
+        let x = Term::Variable(VarSym(symbol_table::GlobalSymbol::from("X"), 0));
+        let eq_xx = Term::Function(eq_fun, vec![x.clone(), x.clone()]);
+        let rule_eq = (eq_xx, Term::Function(true_fun, vec![]));
+        eqs.push(rule_eq);
+        // Use first conjecture as input term if present
+        conj_term_override = conj_terms.into_iter().next();
+        kbe.E = eqs;
     } else {
-        parseterm(&term_arg)
+        kbe.E = read_equations(&rule_path);
+    }
+
+    // Parse term (override from conjecture if provided by .p file)
+    let t = if let Some(ct) = conj_term_override { ct } else {
+        if std::path::Path::new(&term_arg).is_file() {
+            parseterm(&std::fs::read_to_string(&term_arg).unwrap())
+        } else {
+            parseterm(&term_arg)
+        }
     };
 
     let t_id = insert_term(&t, &mut kbe.dag);
