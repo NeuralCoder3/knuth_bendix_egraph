@@ -116,9 +116,13 @@ fn insert_term(t: &Term, kbe: &mut KBEDAG) -> Id {
             // embed all children, then create a new node (keep track of parent)
             let mut children = vec![];
             for t_prime in ts {
+                // Recursively insert and canonicalize child Ids so interning uses canonical reps
                 let child = insert_term(t_prime, kbe);
+                let child = resolve_id(kbe, child);
                 children.push(child);
             }
+            // Ensure children vector itself is fully canonicalized
+            let children = children.into_iter().map(|c| resolve_id(kbe, c)).collect();
             let node = ENode {
                 label: *f,
                 children,
@@ -368,7 +372,17 @@ where
             // .collect::<Vec<_>>(),
         true,
     ));
-    return new_rules;
+
+    // return new_rules;
+    // Deduplicate newly generated equations and filter out ones already present in E or R
+    let mut dedup: RuleSet = vec![];
+    for eq in new_rules.into_iter() {
+        let is_dup = dedup.iter().any(|e| sameeq(e, &eq))
+            || kbe.E.iter().any(|e| sameeq(e, &eq))
+            || kbe.R.iter().any(|r| sameeq(r, &eq));
+        if !is_dup { dedup.push(eq); }
+    }
+    return dedup;
 }
 
 fn resolve_id(kbe: &KBEDAG, id: Id) -> Id {

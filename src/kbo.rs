@@ -432,7 +432,11 @@ pub fn deduce_critical_pairs(
 /// Adds the new rule `r` to the set of rules.
 pub fn add_rule((r, rules, eqs): (Rule, RuleSet, EquationSet)) -> (RuleSet, EquationSet) {
     let mut new_rules = rules;
-    new_rules.insert(0, r);
+    // Avoid inserting duplicate rules (modulo variable renaming)
+    let already_present = new_rules.iter().any(|existing| sameeq(existing, &r));
+    if !already_present {
+        new_rules.insert(0, r);
+    }
     (new_rules, eqs)
 }
 
