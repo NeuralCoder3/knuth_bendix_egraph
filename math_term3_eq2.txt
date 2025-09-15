@@ -1,0 +1,1 @@
+Eq(Mul(B, Add(Zero, Mul(X, Add(Add(Add(Mul(X, One), Sub(Pow(Y, Zero), Div(Mul(Zero, Z), Pow(A, One)))), Div(Pow(Pow(B, One), One), Mul(One, One))), Div(Mul(D, Zero), Pow(E, One)))))),Mul(B,Mul(X,Add(Add(X,One),Zero))))

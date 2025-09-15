@@ -1,0 +1,1 @@
+Eq(Add(Mul(X, B), Add(Mul(X, Pow(B, Two)), Mul(B, Pow(X, Two)))), Add(Mul(X, B), Add(Mul(X, Pow(B, Two)), Mul(B, Pow(X, Two)))))

@@ -1,0 +1,7 @@
+Add(a, b) = Add(b, a)
+Add(a, Add(b, c)) = Add(Add(a, b), c)
+Sub(a, b) = Add(a, Mul(MinusOne, b))
+Add(a, Zero) = a
+a = Add(a, Zero)
+Sub(a, a) = Zero
+Eq(x,x) = True

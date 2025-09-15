@@ -56,4 +56,28 @@ Add(Mul(B, X), Add(Mul(B, Pow(X, Two)), Mul(B, Div(Mul(B, X), One))))
 b*x + b*x^2 + b*(b*x)/1
 with 1!=0
 Add(Mul(X, B), Add(Mul(X, Pow(B, Two)), Mul(B, Pow(X, Two))))
-x*b+x*b^2+b*x^2
+x*b+x*b^2+b*x
+
+
+
+
+
+twee:
+
+mul(b, add(zero, mul(x, add(add(add(mul(x, one), sub(pow(y, zero), div(mul(zero, z), pow(a, one)))), div(pow(pow(b, one), one), mul(one, one))), div(mul(d, zero), pow(e, one))))))
+    (mul(A,zero) = zero), (mul(A,one) = A)
+mul(b, add(zero, mul(x, add(add(add(x, sub(pow(y, zero), div(mul(zero, z), pow(a, one)))), div(pow(pow(b, one), one), mul(one, one))), div(mul(d, zero), pow(e, one))))))
+
+
+mul(b, add(zero, mul(x, add(add(add(mul(x, one), sub(pow(y, zero), div(mul(zero, z), pow(a, one)))), div(pow(pow(b, one), one), mul(one, one))), div(mul(d, zero), pow(e, one))))))
+    (mul(A,zero) = zero), (mul(A,one) = A)
+mul(b, add(zero, mul(x, add(add(add(x, sub(pow(y, zero), div(mul(zero, z), pow(a, one)))), div(pow(pow(b, one), one), one)), div(zero, pow(e, one))))))
+    add(A,B) = add(B,A), mul(A,B) = mul(B,A)
+    add(A,zero) = A, (mul(A,zero) = zero)
+mul(b, mul(x, add(add(add(x, sub(pow(y, zero), div(z, pow(a, one)))), div(pow(pow(b, one), one), one)), div(zero, pow(e, one)))))
+    pow(X,one) = X
+mul(b, mul(x, add(add(add(x, sub(pow(y, zero), div(z, a))), div(b, one)), div(zero, e))))
+    pow(X,zero) = if(eq(X,zero),pow(X,zero),one), 
+
+ = 
+add(mul(x, b), add(mul(x, pow(b, two)), mul(b, pow(x, two))))
