@@ -455,6 +455,48 @@ fn canonicalize_dag(kbe: &mut KBEDAG) {
     }
 }
 
+fn cleanup_dag(kbe: &mut KBEDAG, root: Id) {
+    // Compute set of nodes reachable from the (resolved) root via resolved children
+    let mut reachable: HashSet<Id> = HashSet::new();
+    let mut stack: Vec<Id> = vec![resolve_id(kbe, root)];
+
+    while let Some(id) = stack.pop() {
+        if reachable.contains(&id) {
+            continue;
+        }
+        if let Some(node) = kbe.C.get_by_left(&id) {
+            reachable.insert(id);
+            for child in node.children.iter() {
+                stack.push(resolve_id(kbe, *child));
+            }
+        }
+    }
+
+    // Collect ids to remove (not reachable)
+    let to_remove: Vec<Id> = kbe
+        .C
+        .left_values()
+        .cloned()
+        .filter(|id| !reachable.contains(id))
+        .collect();
+
+    // Remove unreachable nodes
+    for id in to_remove.into_iter() {
+        kbe.C.remove_by_left(&id);
+    }
+
+    // Prune stale substitutions: keep only mappings whose old id is still reachable
+    // let stale_subs: Vec<Id> = kbe
+    //     .S
+    //     .keys()
+    //     .cloned()
+    //     .filter(|old_id| !reachable.contains(old_id))
+    //     .collect();
+    // for old_id in stale_subs.into_iter() {
+    //     kbe.S.remove(&old_id);
+    // }
+}
+
 #[derive(Default)]
 struct SymbolCount {
     arity: usize,
@@ -758,6 +800,13 @@ fn main() {
         // 3.2 will take care of the simplification
         kbe.E.extend(new_rules);
         step31_total += step31_start.elapsed();
+
+
+
+        // cleanup the dag
+        // remove all dangling nodes (nodes without parent), except for the root
+        cleanup_dag(&mut kbe.dag, t_id);
+
 
         // Step 3.2 (KBO: Add critical pairs)
         // TODO: keep previous critical pairs instead of complete recomputation
