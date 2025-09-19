@@ -376,6 +376,10 @@ where
         true,
     ));
 
+    // recanonicalize the dag
+    canonicalize_dag(&mut kbe.dag);
+
+
     return new_rules;
     // Deduplicate newly generated equations and filter out ones already present in E or R
     // let mut dedup: RuleSet = vec![];
@@ -394,6 +398,61 @@ fn resolve_id(kbe: &KBEDAG, id: Id) -> Id {
         id = *real_id;
     }
     id
+}
+
+fn canonicalize_dag(kbe: &mut KBEDAG) {
+    // Repeatedly normalize children via resolve_id and merge duplicates until fixpoint
+    loop {
+        let mut changed = false;
+        // Collect a stable snapshot to allow mutation during iteration
+        let entries: Vec<(Id, ENode)> = kbe
+            .C
+            .iter()
+            .map(|(id, node)| (*id, node.clone()))
+            .collect();
+
+        for (id, node) in entries.into_iter() {
+            // Skip if id was redirected since snapshot
+            if !kbe.C.contains_left(&id) {
+                continue;
+            }
+
+            let resolved_children: Vec<Id> = node
+                .children
+                .iter()
+                .map(|c| resolve_id(kbe, *c))
+                .collect();
+
+            if resolved_children != node.children {
+                let new_node = ENode {
+                    label: node.label,
+                    children: resolved_children,
+                };
+
+                // If an identical canonical node already exists, redirect id to it
+                let redirect_to = kbe.C.get_by_right(&new_node).cloned();
+                if let Some(existing_id) = redirect_to {
+                    if existing_id != id {
+                        kbe.C.remove_by_left(&id);
+                        // Ensure we are not overwriting an existing mapping
+                        debug_assert!(kbe.S.get(&id).is_none());
+                        kbe.S.insert(id, existing_id);
+                        changed = true;
+                        continue;
+                    }
+                }
+
+                // Otherwise, update the node in place with canonical children
+                kbe.C.remove_by_left(&id);
+                kbe.C.insert_no_overwrite(id, new_node).unwrap();
+                changed = true;
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
 }
 
 #[derive(Default)]
