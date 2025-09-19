@@ -433,10 +433,10 @@ pub fn deduce_critical_pairs(
 pub fn add_rule((r, rules, eqs): (Rule, RuleSet, EquationSet)) -> (RuleSet, EquationSet) {
     let mut new_rules = rules;
     // Avoid inserting duplicate rules (modulo variable renaming)
-    let already_present = new_rules.iter().any(|existing| sameeq(existing, &r));
-    if !already_present {
+    // let already_present = new_rules.iter().any(|existing| sameeq(existing, &r));
+    // if !already_present {
         new_rules.insert(0, r);
-    }
+    // }
     (new_rules, eqs)
 }
 
@@ -564,4 +564,13 @@ where
 /// Runs the verbose completion version with an ordering induced by `pre`.
 pub fn knuth_bendix_completion_verbose_precedence(pre: &Precedence, eqs: EquationSet) -> RuleSet {
     knuth_bendix_completion_verbose(&|t, t_prime| lpo_gt(pre, t, t_prime), eqs)
+}
+
+pub fn term_size(pre: &Precedence, t: &Term) -> usize 
+{
+    match t {
+        Term::Variable(_) => 1,
+        Term::Function(f, ts) => 
+            pre.iter().find(|(f_prime, _)| f_prime == f).unwrap().1 as usize + ts.iter().map(|t| term_size(pre, t)).sum::<usize>()
+    }
 }

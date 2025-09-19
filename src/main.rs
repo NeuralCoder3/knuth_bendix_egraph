@@ -121,7 +121,7 @@ fn insert_term(t: &Term, kbe: &mut KBEDAG) -> Id {
                 let child = resolve_id(kbe, child);
                 children.push(child);
             }
-            // Ensure children vector itself is fully canonicalized
+            // Ensure children vector itself is fully canonicalized (with respect to other nodes)
             let children = children.into_iter().map(|c| resolve_id(kbe, c)).collect();
             let node = ENode {
                 label: *f,
@@ -169,7 +169,8 @@ fn match_rule_var_subst(
     match left {
         Term::Variable(x) => {
             // println!(" DBG: Unify {:?} with {:?}", x, node_id);
-            if let Some((_, subst_id)) = subst.iter().find(|(var, _)| *var == *x) {
+            // if let Some((_, subst_id)) = subst.iter().find(|(var, _)| *var == *x) {
+            if let Some((_, subst_id)) = subst.iter().find(|(var, _)| var == x) {
                 // in subst, check if node matches
                 *subst_id == node_id
             } else {
@@ -181,6 +182,8 @@ fn match_rule_var_subst(
         Term::Function(f, ts) => {
             let node = kbe.C.get_by_left(&node_id).unwrap();
             *f == node.label
+            // let node = kbe.C.get_by_left(&resolve_id(kbe, node_id)).unwrap();
+            // f == &node.label
                 && ts.len() == node.children.len()
                 && ts
                     .iter()
@@ -373,16 +376,16 @@ where
         true,
     ));
 
-    // return new_rules;
+    return new_rules;
     // Deduplicate newly generated equations and filter out ones already present in E or R
-    let mut dedup: RuleSet = vec![];
-    for eq in new_rules.into_iter() {
-        let is_dup = dedup.iter().any(|e| sameeq(e, &eq))
-            || kbe.E.iter().any(|e| sameeq(e, &eq))
-            || kbe.R.iter().any(|r| sameeq(r, &eq));
-        if !is_dup { dedup.push(eq); }
-    }
-    return dedup;
+    // let mut dedup: RuleSet = vec![];
+    // for eq in new_rules.into_iter() {
+    //     let is_dup = dedup.iter().any(|e| sameeq(e, &eq))
+    //         || kbe.E.iter().any(|e| sameeq(e, &eq))
+    //         || kbe.R.iter().any(|r| sameeq(r, &eq));
+    //     if !is_dup { dedup.push(eq); }
+    // }
+    // return dedup;
 }
 
 fn resolve_id(kbe: &KBEDAG, id: Id) -> Id {
@@ -548,7 +551,8 @@ fn main() {
             node.label,
             node.children
                 .iter()
-                .map(|c| c.to_string())
+                // .map(|c| c.to_string())
+                .map(|c| resolve_id(&kbe.dag, *c).to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         );
@@ -867,7 +871,9 @@ fn main() {
                     }
                 }
 
-                let size = (strterm(&l).len() + strterm(&r).len()) as i32;
+                // let size = (strterm(&l).len() + strterm(&r).len()) as i32;
+                // let size = nodes(&l) + nodes(&r);
+                let size = term_size(&pre, &l) + term_size(&pre, &r);
 
                 ((l,r), (count, rule_count, size))
             })
