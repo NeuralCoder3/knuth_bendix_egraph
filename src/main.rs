@@ -148,6 +148,31 @@ fn extract_term(kbe: &KBEDAG, id: Id) -> Term {
     Term::Function(node.label, children)
 }
 
+fn fingerprint(t: &Term) -> u64 {
+    use std::hash::{Hash, Hasher};
+    use std::collections::hash_map::DefaultHasher;
+    fn walk(term: &Term, hasher: &mut DefaultHasher) {
+        match term {
+            Term::Variable(x) => {
+                // Distinguish node type and incorporate variable identity
+                0u8.hash(hasher);
+                x.hash(hasher);
+            }
+            Term::Function(f, ts) => {
+                1u8.hash(hasher);
+                f.hash(hasher);
+                ts.len().hash(hasher);
+                for child in ts.iter() {
+                    walk(child, hasher);
+                }
+            }
+        }
+    }
+    let mut hasher = DefaultHasher::new();
+    walk(t, &mut hasher);
+    hasher.finish()
+}
+
 fn match_rule_var(kbe: &KBEDAG, left: &Term, node_id: Id) -> bool {
     match_rule_var_subst(kbe, left, node_id, &mut vec![])
 }
@@ -223,7 +248,7 @@ where
 {
     let mut applied = vec![];
 
-    let rules : Vec<(&Term, &Term)> = if both_sides {
+    let mut rules : Vec<(&Term, &Term)> = if both_sides {
         rules
             .iter()
             .flat_map(|(l, r)| {
@@ -240,9 +265,17 @@ where
             .collect::<>()
     };
 
+    // Deterministic rule processing order
+    rules.sort_by(|(l1, r1), (l2, r2)| {
+        let k1 = (fingerprint(l1), fingerprint(r1));
+        let k2 = (fingerprint(l2), fingerprint(r2));
+        k1.cmp(&k2)
+    });
+
     for (l, r) in rules.iter() {
-        // for id in kbe.C.left_values() {
-        let ids = kbe.C.iter().map(|(id, _)| *id);
+        // Deterministic iteration over node ids
+        let mut ids: Vec<Id> = kbe.C.left_values().cloned().collect();
+        ids.sort();
 
         let mut rewrites = vec![];
         #[cfg(debug_assertions)]
@@ -296,6 +329,12 @@ where
 
         // To avoid overlapping rewrites:
         let mut already_replaced = HashSet::new();
+        // Deterministic application order for rewrites
+        rewrites.sort_by(|(id1, l1, r1), (id2, l2, r2)| {
+            id1.cmp(id2)
+                .then_with(|| fingerprint(l1).cmp(&fingerprint(l2)))
+                .then_with(|| fingerprint(r1).cmp(&fingerprint(r2)))
+        });
         for (id, l,r) in rewrites {
             #[cfg(debug_assertions)]
             println!(
@@ -405,11 +444,13 @@ fn canonicalize_dag(kbe: &mut KBEDAG) {
     loop {
         let mut changed = false;
         // Collect a stable snapshot to allow mutation during iteration
-        let entries: Vec<(Id, ENode)> = kbe
+        let mut entries: Vec<(Id, ENode)> = kbe
             .C
             .iter()
             .map(|(id, node)| (*id, node.clone()))
             .collect();
+        // Process in deterministic id order
+        entries.sort_by_key(|(id, _)| *id);
 
         for (id, node) in entries.into_iter() {
             // Skip if id was redirected since snapshot
@@ -429,14 +470,19 @@ fn canonicalize_dag(kbe: &mut KBEDAG) {
                     children: resolved_children,
                 };
 
-                // If an identical canonical node already exists, redirect id to it
+                // If an identical canonical node already exists, redirect to the smaller id deterministically
                 let redirect_to = kbe.C.get_by_right(&new_node).cloned();
                 if let Some(existing_id) = redirect_to {
                     if existing_id != id {
-                        kbe.C.remove_by_left(&id);
-                        // Ensure we are not overwriting an existing mapping
-                        debug_assert!(kbe.S.get(&id).is_none());
-                        kbe.S.insert(id, existing_id);
+                        let survivor = existing_id.min(id);
+                        let victim = existing_id.max(id);
+                        if kbe.C.contains_left(&victim) {
+                            kbe.C.remove_by_left(&victim);
+                        }
+                        if victim != survivor {
+                            debug_assert!(kbe.S.get(&victim).is_none());
+                            kbe.S.insert(victim, survivor);
+                        }
                         changed = true;
                         continue;
                     }
@@ -675,9 +721,11 @@ fn main() {
         count_symbols(&rule.0, &mut symbol_counts);
         count_symbols(&rule.1, &mut symbol_counts);
     }
-    // sort by count descending
+    // Deterministic precedence: sort by (count desc, arity desc, symbol name asc)
     let mut sorted_symbols: Vec<_> = symbol_counts.into_iter().collect();
-    sorted_symbols.sort_by_key(|(_, count)| (count.count as i64) + 100*(count.arity as i64)); // sort by count descending
+    // sorted_symbols.sort_by_key(|(_, count)| (count.count as i64) + 100*(count.arity as i64)); // sort by count descending
+    // sorted_symbols.sort_by_key(|(_, count)| (count.arity, count.count));
+    sorted_symbols.sort_by_key(|(s, count)| (count.arity, count.count, s.to_string()));
     // sorted_symbols.reverse();
     #[cfg(debug_assertions)]
     println!("Symbol counts:");
@@ -741,6 +789,7 @@ fn main() {
 
     let mut current_result = None;
     let mut achieved_time = None;
+    let mut achieved_iteration = None;
     let mut step31_total = std::time::Duration::from_secs(0);
     let mut step32_total = std::time::Duration::from_secs(0);
     // Global critical pair cache across iterations, keyed by owned rule content
@@ -912,7 +961,13 @@ fn main() {
                         strterm(simpl_r)
                     );
                 }
-                critical_pair_cache.insert(key, simpl_cp.clone());
+                // Insert with deterministic key order
+                let key_sorted = if fingerprint(&key.0.0) < fingerprint(&key.1.0) {
+                    key
+                } else {
+                    (key.1.clone(), key.0.clone())
+                };
+                critical_pair_cache.insert(key_sorted, simpl_cp.clone());
                 cps.extend(simpl_cp);
             }
         }
@@ -922,6 +977,7 @@ fn main() {
         println!("Computed {} critical pairs", cps.len());
 
         // for each node in C, search if a cps applies, count how often
+        // Dedup + deterministic ordering of CPs
         let mut counted_cps = cps
             .iter()
             // .cloned()
@@ -987,9 +1043,12 @@ fn main() {
             })
             .collect::<Vec<_>>();
 
-        counted_cps.sort_by_key(|(_, (count, rule_count, size))| {
-            (size.clone(), -rule_count.clone(), -count.clone())
-            // size.clone()
+        counted_cps.sort_by(|((l1, r1), (c1, rc1, s1)), ((l2, r2), (c2, rc2, s2))| {
+            s1.cmp(s2)
+                .then_with(|| rc2.cmp(rc1))
+                .then_with(|| c2.cmp(c1))
+                .then_with(|| fingerprint(l1).cmp(&fingerprint(l2)))
+                .then_with(|| fingerprint(r1).cmp(&fingerprint(r2)))
         });
 
         // take top 5 to extend E
@@ -1040,6 +1099,7 @@ fn main() {
         if current_result.is_none() || current_result.as_ref().unwrap() != &t_prime_str {
             current_result = Some(t_prime_str);
             achieved_time = Some(start_time.elapsed());
+            achieved_iteration = Some(i);
         }
         println!(
             "Time elapsed: {:.2?} ({:.2?} | {:.2?})",
@@ -1048,7 +1108,7 @@ fn main() {
             step32_total
         );
         if let Some(achieved_time) = achieved_time {
-            println!("Achieved after: {:.2?}", achieved_time);
+            println!("Achieved after: {:.2?} (iteration {})", achieved_time, achieved_iteration.unwrap());
         }
     }
 
