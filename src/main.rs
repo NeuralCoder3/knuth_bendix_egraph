@@ -20,6 +20,20 @@ use crate::kbo::*;
 use crate::term_rewrite::*;
 use crate::types::*;
 
+
+#[cfg(not(feature = "hotpath"))]
+macro_rules! measure_block {
+    ($name:expr, $block:expr) => {
+        $block
+    };
+}
+#[cfg(feature = "hotpath")]
+macro_rules! measure_block {
+    ($name:expr, $block:expr) => {
+        hotpath::measure_block!($name, $block)
+    };
+}
+
 fn knuth_steps<F>(verbose: bool, lpo: &F, state: (RuleSet, EquationSet)) -> (bool,(RuleSet, EquationSet))
 where
     F: Fn(&Term, &Term) -> bool,
@@ -474,6 +488,10 @@ fn canonicalize_dag(kbe: &mut KBEDAG) {
                 let redirect_to = kbe.C.get_by_right(&new_node).cloned();
                 if let Some(existing_id) = redirect_to {
                     if existing_id != id {
+                        // kbe.C.remove_by_left(&id);
+                        // // Ensure we are not overwriting an existing mapping
+                        // debug_assert!(kbe.S.get(&id).is_none());
+                        // kbe.S.insert(id, existing_id);
                         let survivor = existing_id.min(id);
                         let victim = existing_id.max(id);
                         if kbe.C.contains_left(&victim) {
@@ -602,6 +620,8 @@ struct Args {
     positional: Vec<String>,
 }
 
+// You can configure any percentile between 0 and 100
+#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50,99]))]
 fn main() {
     let start_time = std::time::Instant::now();
     let args = Args::parse();
@@ -862,12 +882,16 @@ fn main() {
         let step32_start = std::time::Instant::now();
         let mut cps = vec![];
 
+        measure_block!("cp_construction", 
         {
             // let rules = kbe.R.clone();
-            let mut rules = kbe.R.iter().map(|(l, r)| (l, r)).collect::<Vec<_>>();
+            let mut rules;
             // R + E in both direction
+                measure_block!("prepare", {
+                    rules =  kbe.R.iter().map(|(l, r)| (l, r)).collect::<Vec<_>>();
             rules.extend(kbe.E.iter().map(|(l, r)| (l, r)));
             rules.extend(kbe.E.iter().map(|(l, r)| (r, l)));
+                });
             // Use the global cache across iterations
             // Per-iteration normalization cache used by linorm_cached
             let mut norm_cache: HashMap<Term, Term> = HashMap::new();
@@ -879,13 +903,20 @@ fn main() {
         //     ]
         // }).collect::<Vec<_>>();
 
-        for (i, rule1) in rules.iter().enumerate() {
-            for (j, rule2) in rules.iter().enumerate() {
-                if i > j {
-                    continue; // only consider pairs once
-                }
+                measure_block!("for", {
+        // for (i, rule1) in rules.iter().enumerate() {
+        //     for (j, rule2) in rules.iter().enumerate() {
+        for j in 0..rules.len() {
+            let rule2 = rules[j];
+            for i in 0..(j+1) {
+                // if i > j {
+                //     continue; // only consider pairs once
+                // }
+                let rule1 = rules[i];
+                let key;
+                measure_block!("cached_cp", {
                 // Use owned Term pairs as cache key so mutations to rule sets don't affect identity
-                let key = (
+                key = (
                     (rule1.0.clone(), rule1.1.clone()),
                     (rule2.0.clone(), rule2.1.clone())
                 );
@@ -909,7 +940,8 @@ fn main() {
                     cps.extend(simpl_cp);
                     continue;
                 }
-
+                });
+                measure_block!("new_cp_construction", {
                 #[cfg(debug_assertions)]
                 println!(
                     "DBG: Critical pair: {} -> {} with {} -> {}",
@@ -969,10 +1001,13 @@ fn main() {
                 };
                 critical_pair_cache.insert(key_sorted, simpl_cp.clone());
                 cps.extend(simpl_cp);
+                });
             }
         }
+        });
 
         }
+    );
         #[cfg(debug_assertions)]
         println!("Computed {} critical pairs", cps.len());
 

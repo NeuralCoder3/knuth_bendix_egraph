@@ -15,6 +15,7 @@ symbol_table = {version = "0.4.0", features = ["global"]}
 parking_lot = "0.12"
 hashbrown = "0.16"
 ahash = "0.8"
+hotpath = { version = "0.2", optional = true }
 
 [[bin]]
 name = "main"
@@ -31,3 +32,10 @@ debug = "line-tables-only"
 # Time elapsed: 4.56s (14.87ms | 4.37s)
 # Achieved after: 935.44ms
 # linuxKernel.packages.linux_6_6.perf
+
+[features]
+hotpath = ["dep:hotpath", "hotpath/hotpath"]
+hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
+hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
+hotpath-alloc-count-total= ["hotpath/hotpath-alloc-count-total"]
+hotpath-alloc-count-max= ["hotpath/hotpath-alloc-count-max"]
