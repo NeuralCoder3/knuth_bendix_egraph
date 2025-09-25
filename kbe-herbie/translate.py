@@ -1,5 +1,7 @@
 #!/usr/bin/python3 -B
 
+import sys
+
 out = ""
 
 def tokenize(lines):
@@ -15,39 +17,37 @@ def tokenize(lines):
     return [x for x in full.split() if x != ""]
 
 def deop(x):
-    if x == "+":
-        return "Add"
-    if x == "-":
-        return "Sub"
-    if x == "*":
-        return "Mul"
-    if x == "/":
-        return "Div"
-    if x == "0":
-        return "Zero"
-    if x == "1":
-        return "One"
-    if x == "-1":
-        return "NegOne"
-    if x == "2":
-        return "Two"
-    if x == "-2":
-        return "NegTwo"
-    if x == "3":
-        return "Three"
-    if x == "1/2":
-        return "AHalf"
-    if x in ["x", "y", "z", "a", "b", "c"]:
-        return x
-    return x.capitalize()
+    if x == "+": return "Add"
+    if x == "-": return "Sub"
+    if x == "*": return "Mul"
+    if x == "/": return "Div"
+    if x == "0": return "Zero"
+    if x == "1": return "One"
+    if x == "-1": return "NegOne"
+    if x == "2": return "Two"
+    if x == "-2": return "NegTwo"
+    if x == "3": return "Three"
+    if x == "4": return "Four"
+    if x == "6": return "Six"
+    if x == "1/2": return "AHalf"
+    if x == "1/3": return "AThird"
+    if x in ["x", "y", "z", "a", "b", "c", "d"]: return x
+    if x[0].isalpha(): return x.capitalize()
+    print("can't parse \"" + x + "\"")
+    sys.exit(1)
 
 def reformat_term(toks):
     global out
     if toks[0] != "(":
         out += deop(toks[0])
         return toks[1:]
-
     assert(toks[0] == "(")
+
+    # for the weird case of (E) and (PI).
+    if len(toks) > 2 and toks[2] == ")":
+        out += deop(toks[1])
+        return toks[3:]
+
     toks = toks[1:]
     out += deop(toks[0]) + "("
     toks = toks[1:]
@@ -91,6 +91,6 @@ def main():
     lines = open("rules.rkt").read()
     toks = tokenize(lines)
     reformat(toks)
-    print(out)
+    print(out[:-1], end="")
 
 main()

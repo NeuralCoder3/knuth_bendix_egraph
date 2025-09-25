@@ -1,0 +1,1 @@
+Div(Sub(X, Lo), Sub(Hi, Lo))
