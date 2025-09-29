@@ -338,14 +338,15 @@ fn rule_complexity(rule: &Rule) -> usize {
 /// Returns the oriented rule together with the current rules and the remaining equations.
 pub fn orient_equation<F>(
     lpo: &F,
-    state: (RuleSet, EquationSet),
-) -> Either<(Rule, RuleSet, EquationSet), (RuleSet, EquationSet)>
+    state: (StagedVec<Rule>, StagedVec<Equation>),
+) -> Either<(Rule, StagedVec<Rule>, StagedVec<Equation>), (StagedVec<Rule>, StagedVec<Equation>)>
 // Result<(Rule, RuleSet, EquationSet), CompletionFailed>
 where
     F: Fn(&Term, &Term) -> bool,
 {
+    // eqs.current were already tried and are unorientable
     let (rules, eqs) = state;
-    let orientable: Vec<Equation> = eqs
+    let orientable: Vec<Equation> = eqs.staged
         .iter()
         .cloned()
         .filter(|(l, r)| lpo(l, r) || lpo(r, l))
@@ -354,6 +355,7 @@ where
         // return Err(CompletionFailed);
         return Either::Right((rules, eqs));
     }
+    // TODO: orient all?
     let chosen = orientable
         .into_iter()
         .reduce(|eq1, eq2| {
@@ -370,20 +372,25 @@ where
     } else {
         (r.clone(), l.clone())
     };
-    let new_eqs: EquationSet = eqs.into_iter().filter(|e| *e != chosen).collect();
+    let new_eqs: EquationSet = eqs.staged.into_iter().filter(|e| *e != chosen).collect();
     // Ok((new_rule, rules, new_eqs))
-    Either::Left((new_rule, rules, new_eqs))
+    Either::Left((new_rule, rules, StagedVec::rebuild(eqs.current, new_eqs)))
 }
 
 /// Normalizes the right–hand sides of `rules` using the new rule `r`.
-pub fn compose((r, rules, eqs): (Rule, RuleSet, EquationSet)) -> (Rule, RuleSet, EquationSet) {
-    let mut r_and_rules = vec![r.clone()];
-    r_and_rules.extend(rules.clone());
-    let new_rules: RuleSet = rules
-        .into_iter()
-        .map(|(l, r_prime)| (l, linorm(&r_and_rules, &r_prime)))
+pub fn compose((r, rules, eqs): (Rule, StagedVec<Rule>, StagedVec<Equation>)) -> (Rule, StagedVec<Rule>, StagedVec<Equation>) {
+    let mut r_and_rules = vec![&r];
+    r_and_rules.extend(rules.current.iter());
+    r_and_rules.extend(rules.staged.iter());
+    let new_rules_current: RuleSet = rules.current
+        .iter()
+        .map(|(l, r_prime)| (l.clone(), linorm_ref(&r_and_rules, &r_prime)))
         .collect();
-    (r, new_rules, eqs)
+    let new_rules_staged: RuleSet = rules.staged
+        .iter()
+        .map(|(l, r_prime)| (l.clone(), linorm_ref(&r_and_rules, &r_prime)))
+        .collect();
+    (r, StagedVec::rebuild(new_rules_current, new_rules_staged), eqs)
 }
 
 /// Adds all critical pairs deducible from `r` (with each rule in `r :: rules`)
@@ -430,52 +437,61 @@ pub fn deduce_critical_pairs(
 // }
 
 /// Adds the new rule `r` to the set of rules.
-pub fn add_rule((r, rules, eqs): (Rule, RuleSet, EquationSet)) -> (RuleSet, EquationSet) {
+pub fn add_rule((r, rules, eqs): (Rule, StagedVec<Rule>, StagedVec<Equation>)) -> (StagedVec<Rule>, StagedVec<Equation>) {
     let mut new_rules = rules;
     // Avoid inserting duplicate rules (modulo variable renaming)
     // let already_present = new_rules.iter().any(|existing| sameeq(existing, &r));
     // if !already_present {
-        new_rules.insert(0, r);
+        new_rules.staged.insert(0, r);
     // }
     (new_rules, eqs)
 }
 
 /// Normalizes both sides of every equation in `eqs` using the current rules.
-pub fn simplify((rules, eqs): (RuleSet, EquationSet)) -> (RuleSet, EquationSet) {
-    let new_eqs: EquationSet = eqs
+pub fn simplify((rules, eqs): (StagedVec<Rule>, StagedVec<Equation>)) -> (StagedVec<Rule>, StagedVec<Equation>) {
+    let all_rules = rules.iter_all().collect::<Vec<_>>();
+    let new_eqs_staged: EquationSet = eqs.staged
         .into_iter()
-        .map(|(l, r)| (linorm(&rules, &l), linorm(&rules, &r)))
+        .map(|(l, r)| (linorm_ref(&all_rules, &l), linorm_ref(&all_rules, &r)))
         .collect();
-    (rules, new_eqs)
+    // TODO: do we need to normalize old equations?
+    let new_eqs_current: EquationSet = eqs.current
+        .into_iter()
+        .map(|(l, r)| (linorm_ref(&all_rules, &l), linorm_ref(&all_rules, &r)))
+        .collect();
+    (rules, StagedVec::rebuild(new_eqs_current,new_eqs_staged))
 }
 
 /// Removes trivial equations (where both sides are equal). If `verbose` is true,
 /// duplicate equations are also removed via `distincteqs`.
-pub fn remove_trivial(verbose: bool, (rules, eqs): (RuleSet, EquationSet)) -> (RuleSet, EquationSet) {
-    let eqs = if verbose { distincteqs(eqs) } else { eqs };
-    let new_eqs: EquationSet = eqs.into_iter().filter(|(l, r)| l != r).collect();
-    (rules, new_eqs)
+pub fn remove_trivial(verbose: bool, (rules, eqs): (StagedVec<Rule>, StagedVec<Equation>)) -> (StagedVec<Rule>, StagedVec<Equation>) {
+    // let eqs = if verbose { distincteqs(eqs) } else { eqs };
+    // let new_eqs: EquationSet = eqs.into_iter().filter(|(l, r)| l != r).collect();
+    let new_eqs_staged: EquationSet = eqs.staged.into_iter().filter(|(l, r)| l != r).collect();
+    // TODO: current should probably already be simplified
+    let new_eqs_current: EquationSet = eqs.current.into_iter().filter(|(l, r)| l != r).collect();
+    (rules, StagedVec::rebuild(new_eqs_current,new_eqs_staged))
 }
 
 /// Performs one Knuth–Bendix completion step on the current state using ordering `lpo`.
-fn completion_step<F>(
-    verbose: bool,
-    lpo: &F,
-    state: (RuleSet, EquationSet),
-) -> (RuleSet, EquationSet)
-where
-    F: Fn(&Term, &Term) -> bool,
-{
-    let oriented = orient_equation(lpo, state).left().unwrap();
-    let composed = compose(oriented);
-    let deduced = deduce_critical_pairs(composed);
-    // let collapsed = collapse(lpo,deduced);
-    let collapsed = deduced;
-    let added = add_rule(collapsed);
-    let simplified = simplify(added);
-    let removed = remove_trivial(verbose, simplified);
-    removed
-}
+// fn completion_step<F>(
+//     verbose: bool,
+//     lpo: &F,
+//     state: (RuleSet, EquationSet),
+// ) -> (RuleSet, EquationSet)
+// where
+//     F: Fn(&Term, &Term) -> bool,
+// {
+//     let oriented = orient_equation(lpo, state).left().unwrap();
+//     let composed = compose(oriented);
+//     let deduced = deduce_critical_pairs(composed);
+//     // let collapsed = collapse(lpo,deduced);
+//     let collapsed = deduced;
+//     let added = add_rule(collapsed);
+//     let simplified = simplify(added);
+//     let removed = remove_trivial(verbose, simplified);
+//     removed
+// }
 
 //
 // Printing Functions
@@ -504,67 +520,67 @@ fn print_output(n: usize, rules: &RuleSet) {
 
 /// Repeatedly applies completion steps until there are no equations left.
 /// If `verbose` is true, intermediate states are printed.
-fn completion_loop<F>(
-    verbose: bool,
-    mut n: usize,
-    lpo: &F,
-    mut state: (RuleSet, EquationSet),
-) -> RuleSet
-where
-    F: Fn(&Term, &Term) -> bool,
-{
-    if n == 0 {
-        if verbose {
-            print_input(&state.1);
-        }
-        state = completion_step(verbose, lpo, state);
-        n = 1;
-    }
-    loop {
-        let (ref rules, ref eqs) = state;
-        if eqs.is_empty() {
-            let rules_prime: RuleSet = rules.iter().map(|r| decvarsub(r)).collect();
-            if verbose {
-                print_output(n, &rules_prime);
-            }
-            return rules_prime;
-        } else {
-            if verbose {
-                print_step(n, rules, eqs);
-            }
-            state = completion_step(verbose, lpo, state);
-            n += 1;
-        }
-    }
-}
+// fn completion_loop<F>(
+//     verbose: bool,
+//     mut n: usize,
+//     lpo: &F,
+//     mut state: (RuleSet, EquationSet),
+// ) -> RuleSet
+// where
+//     F: Fn(&Term, &Term) -> bool,
+// {
+//     if n == 0 {
+//         if verbose {
+//             print_input(&state.1);
+//         }
+//         state = completion_step(verbose, lpo, state);
+//         n = 1;
+//     }
+//     loop {
+//         let (ref rules, ref eqs) = state;
+//         if eqs.is_empty() {
+//             let rules_prime: RuleSet = rules.iter().map(|r| decvarsub(r)).collect();
+//             if verbose {
+//                 print_output(n, &rules_prime);
+//             }
+//             return rules_prime;
+//         } else {
+//             if verbose {
+//                 print_step(n, rules, eqs);
+//             }
+//             state = completion_step(verbose, lpo, state);
+//             n += 1;
+//         }
+//     }
+// }
 
-/// Runs the Knuth–Bendix completion algorithm with ordering `lpo` and initial equations `eqs`.
-pub fn knuth_bendix_completion<F>(lpo: &F, eqs: EquationSet) -> RuleSet
-where
-    F: Fn(&Term, &Term) -> bool,
-{
-    let initial_state = remove_trivial(false, (vec![], eqs));
-    completion_loop(false, 0, lpo, initial_state)
-}
+// /// Runs the Knuth–Bendix completion algorithm with ordering `lpo` and initial equations `eqs`.
+// pub fn knuth_bendix_completion<F>(lpo: &F, eqs: EquationSet) -> RuleSet
+// where
+//     F: Fn(&Term, &Term) -> bool,
+// {
+//     let initial_state = remove_trivial(false, (vec![], eqs));
+//     completion_loop(false, 0, lpo, initial_state)
+// }
 
-/// Runs completion using the ordering induced by the precedence `pre`.
-pub fn knuth_bendix_completion_precedence(pre: &Precedence, eqs: EquationSet) -> RuleSet {
-    knuth_bendix_completion(&|t, t_prime| lpo_gt(pre, t, t_prime), eqs)
-}
+// /// Runs completion using the ordering induced by the precedence `pre`.
+// pub fn knuth_bendix_completion_precedence(pre: &Precedence, eqs: EquationSet) -> RuleSet {
+//     knuth_bendix_completion(&|t, t_prime| lpo_gt(pre, t, t_prime), eqs)
+// }
 
-/// Runs the Knuth–Bendix completion algorithm with verbose output.
-pub fn knuth_bendix_completion_verbose<F>(lpo: &F, eqs: EquationSet) -> RuleSet
-where
-    F: Fn(&Term, &Term) -> bool,
-{
-    let initial_state = remove_trivial(false, (vec![], eqs));
-    completion_loop(true, 0, lpo, initial_state)
-}
+// /// Runs the Knuth–Bendix completion algorithm with verbose output.
+// pub fn knuth_bendix_completion_verbose<F>(lpo: &F, eqs: EquationSet) -> RuleSet
+// where
+//     F: Fn(&Term, &Term) -> bool,
+// {
+//     let initial_state = remove_trivial(false, (vec![], eqs));
+//     completion_loop(true, 0, lpo, initial_state)
+// }
 
-/// Runs the verbose completion version with an ordering induced by `pre`.
-pub fn knuth_bendix_completion_verbose_precedence(pre: &Precedence, eqs: EquationSet) -> RuleSet {
-    knuth_bendix_completion_verbose(&|t, t_prime| lpo_gt(pre, t, t_prime), eqs)
-}
+// /// Runs the verbose completion version with an ordering induced by `pre`.
+// pub fn knuth_bendix_completion_verbose_precedence(pre: &Precedence, eqs: EquationSet) -> RuleSet {
+//     knuth_bendix_completion_verbose(&|t, t_prime| lpo_gt(pre, t, t_prime), eqs)
+// }
 
 pub fn term_size(pre: &Precedence, t: &Term) -> usize 
 {

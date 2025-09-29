@@ -136,6 +136,40 @@ pub fn linormsubst(rs: &RuleSet, s: &SubstitutionSet, t: &Term) -> Term {
     }
 }
 
+pub fn linorm_ref(rs: &Vec<&Rule>, t: &Term) -> Term {
+    match t {
+        Term::Variable(_) => linormtop_ref(rs, rs, t),
+        Term::Function(f, ts) => {
+            let new_ts = ts.iter().map(|t| linorm_ref(rs, t)).collect();
+            linormtop_ref(rs, rs, &Term::Function(f.clone(), new_ts))
+        }
+    }
+}
+
+pub fn linormtop_ref(rs: &Vec<&Rule>, sub_rs: &[&Rule], t: &Term) -> Term {
+    if sub_rs.is_empty() {
+        t.clone()
+    } else {
+        let (l, r) = &sub_rs[0];
+        if let Some(s) = collate(l, t) {
+            linormsubst_ref(rs, &s, r)
+        } else {
+            linormtop_ref(rs, &sub_rs[1..], t)
+        }
+    }
+}
+
+pub fn linormsubst_ref(rs: &Vec<&Rule>, s: &SubstitutionSet, t: &Term) -> Term {
+    match t {
+        Term::Variable(_) => subst(s, t),
+        Term::Function(f, ts) => {
+            let mapped = ts.iter().map(|t| linormsubst_ref(rs, s, t)).collect();
+            let new_term = Term::Function(f.clone(), mapped);
+            linormtop_ref(rs, rs, &new_term)
+        }
+    }
+}
+
 
 /// [linorm rs t] normalizes [t] with respect to [rs].
 pub fn linorm(rs: &RuleSet, t: &Term) -> Term {
@@ -150,8 +184,8 @@ pub fn linorm(rs: &RuleSet, t: &Term) -> Term {
 
 /// Cached versions of normalization to avoid repeated work on identical subterms
 pub fn linormtop_cached(
-    rs: &RuleSet,
-    sub_rs: &[Rule],
+    rs: &Vec<&Rule>,
+    sub_rs: &[&Rule],
     t: &Term,
     cache: &mut HashMap<Term, Term>,
 ) -> Term {
@@ -171,7 +205,7 @@ pub fn linormtop_cached(
 }
 
 pub fn linormsubst_cached(
-    rs: &RuleSet,
+    rs: &Vec<&Rule>,
     s: &SubstitutionSet,
     t: &Term,
     cache: &mut HashMap<Term, Term>,
@@ -189,7 +223,7 @@ pub fn linormsubst_cached(
     }
 }
 
-pub fn linorm_cached(rs: &RuleSet, t: &Term, cache: &mut HashMap<Term, Term>) -> Term {
+pub fn linorm_cached(rs: &Vec<&Rule>, t: &Term, cache: &mut HashMap<Term, Term>) -> Term {
     if let Some(n) = cache.get(t) { return n.clone(); }
     let result = match t {
         Term::Variable(_) => linormtop_cached(rs, rs, t, cache),

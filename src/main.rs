@@ -10,6 +10,8 @@ use clap::Parser;
 // use std::collections::HashSet;
 use hashbrown::HashSet;
 use hashbrown::HashMap;
+use priority_queue::PriorityQueue;
+use std::cmp::Reverse;
 use std::io::stdout;
 use std::io::Write;
 use std::time::Duration;
@@ -34,7 +36,7 @@ macro_rules! measure_block {
     };
 }
 
-fn knuth_steps<F>(verbose: bool, lpo: &F, state: (RuleSet, EquationSet)) -> (bool,(RuleSet, EquationSet))
+fn knuth_steps<F>(verbose: bool, lpo: &F, state: (StagedVec<Rule>, StagedVec<Equation>)) -> (bool,(StagedVec<Rule>, StagedVec<Equation>))
 where
     F: Fn(&Term, &Term) -> bool,
 {
@@ -70,7 +72,7 @@ where
     }
 }
 
-fn knuth_loop<F>(verbose: bool, lpo: &F, state: (RuleSet, EquationSet)) -> (RuleSet, EquationSet)
+fn knuth_loop_staged<F>(verbose: bool, lpo: &F, state: (StagedVec<Rule>, StagedVec<Equation>)) -> (StagedVec<Rule>, StagedVec<Equation>)
 where
     F: Fn(&Term, &Term) -> bool,
 {
@@ -111,11 +113,12 @@ struct KBEDAG {
     S: HashMap<Id, Id>, // used to keep track of replacements
 }
 
+
 #[allow(non_snake_case)]
 struct KBEGraph {
     dag: KBEDAG,
-    E: EquationSet,
-    R: RuleSet,
+    E: StagedVec<Equation>,
+    R: StagedVec<Rule>,
 }
 
 /*
@@ -254,7 +257,8 @@ fn subst_node(kbe: &KBEDAG, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
 fn apply_rules_var<F>(
     lpo: &F,
     kbe: &mut KBEDAG,
-    rules: &RuleSet,  // grounded rules
+    rules: &Vec<&Rule>,  // grounded rules
+    // rules: &RuleSet,  // grounded rules
     both_sides: bool, // check reversed side for ground equations to add to rule set
 ) -> RuleSet
 where
@@ -395,10 +399,15 @@ where
     println!("Apply R-rules");
     // for R we know the grounded instances
     // => no need to add
+    // debug_assert!(&kbe.R.staged.is_empty());
     apply_rules_var(
         lpo,
         &mut kbe.dag,
-        &kbe.R,
+        // &kbe.R.iter_all().collect::<Vec<_>>(),
+        // &kbe.R.current,
+        &kbe.R.current.iter().chain(
+            kbe.R.staged.iter()
+        ).collect::<Vec<_>>(),
         // &kbe.R
         //     .iter()
         //     .map(|(l, r)| (l.clone(), r.clone()))
@@ -418,10 +427,15 @@ where
     // ));
     #[cfg(debug_assertions)]
     println!("Apply E-rules");
+    // debug_assert!(&kbe.E.staged.is_empty());
     new_rules.extend(apply_rules_var(
         lpo,
         &mut kbe.dag,
-        &kbe.E,
+        // &kbe.E.iter_all().collect::<Vec<_>>(),
+        // &kbe.E.current,
+        &kbe.E.current.iter().chain(
+            kbe.E.staged.iter()
+        ).collect::<Vec<_>>(),
         // &kbe.E
             // .iter()
             // .map(|(l, r)| (l.clone(), r.clone()))
@@ -438,8 +452,8 @@ where
     // let mut dedup: RuleSet = vec![];
     // for eq in new_rules.into_iter() {
     //     let is_dup = dedup.iter().any(|e| sameeq(e, &eq))
-    //         || kbe.E.iter().any(|e| sameeq(e, &eq))
-    //         || kbe.R.iter().any(|r| sameeq(r, &eq));
+    //         || kbe.E.iter_all().any(|e| sameeq(e, &eq))
+    //         || kbe.R.iter_all().any(|r| sameeq(r, &eq));
     //     if !is_dup { dedup.push(eq); }
     // }
     // return dedup;
@@ -632,8 +646,8 @@ fn main() {
             id_count: 0,
             S: HashMap::new(),
         },
-        E: vec![],
-        R: vec![],
+        E: StagedVec::new(vec![]),
+        R: StagedVec::new(vec![]),
     };
 
     // Determine rule file path
@@ -691,9 +705,9 @@ fn main() {
         eqs.push(rule_eq);
         // Use first conjecture as input term if present
         conj_term_override = conj_terms.into_iter().next();
-        kbe.E = eqs;
+        kbe.E = StagedVec::rebuild(vec![], eqs);
     } else {
-        kbe.E = read_equations(&rule_path);
+        kbe.E = StagedVec::rebuild(vec![], read_equations(&rule_path));
     }
 
     // Parse term (override from conjecture if provided by .p file)
@@ -733,11 +747,11 @@ fn main() {
         // *count = 0; // reset counts
         count.count = 0;
     }
-    for eqs in kbe.E.iter() {
+    for eqs in kbe.E.iter_all() {
         count_symbols(&eqs.0, &mut symbol_counts);
         count_symbols(&eqs.1, &mut symbol_counts);
     }
-    for rule in kbe.R.iter() {
+    for rule in kbe.R.iter_all() {
         count_symbols(&rule.0, &mut symbol_counts);
         count_symbols(&rule.1, &mut symbol_counts);
     }
@@ -782,26 +796,39 @@ fn main() {
     #[cfg(debug_assertions)]
     {
     println!("Rules:");
-    printrules(&kbe.R);
+    printrules(&kbe.R.staged);
+    // println!("Rules staged:");
+    // printrules(&kbe.R.staged);
     println!("Equations:");
-    printeqs(&kbe.E);
+    printeqs(&kbe.E.staged);
+    // println!("Equations staged:");
+    // printeqs(&kbe.E.staged);
     println!("KBC Step");
     }
 
-    kbe.R = vec![];
-    let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
+    // debug_assert!(&kbe.R.staged.is_empty());
+    // debug_assert!(&kbe.E.staged.is_empty());
+    kbe.R = StagedVec::new(vec![]);
+    let state = knuth_loop_staged(true, &lpo, (kbe.R, kbe.E));
     kbe.R = state.0;
     kbe.E = state.1;
+
+    kbe.R.commit();
+    kbe.E.commit();
 
 
     
 
 
-    let t_prime = linorm(&kbe.R, &t);
+    let t_prime = linorm(&kbe.R.current, &t);
     println!("Rules:");
-    printrules(&kbe.R);
+    printrules(&kbe.R.current);
+    // println!("Rules staged:");
+    // printrules(&kbe.R.staged);
     println!("Equations:");
-    printeqs(&kbe.E);
+    printeqs(&kbe.E.current);
+    // println!("Equations staged:");
+    // printeqs(&kbe.E.staged);
     println!("Original:");
     println!("{}", strterm(&t));
     println!("Result:");
@@ -813,7 +840,8 @@ fn main() {
     let mut step31_total = std::time::Duration::from_secs(0);
     let mut step32_total = std::time::Duration::from_secs(0);
     // Global critical pair cache across iterations, keyed by owned rule content
-    let mut critical_pair_cache: HashMap<((Term, Term), (Term, Term)), Vec<(Term, Term)>> = HashMap::new();
+    // let mut critical_pair_cache: HashMap<((Term, Term), (Term, Term)), Vec<(Term, Term)>> = HashMap::new();
+    let mut critical_pair_queue = PriorityQueue::new();
 
     // Step 3 (loop)
     for i in 0..args.iterations {
@@ -845,7 +873,7 @@ fn main() {
         // the larger terms are represented by R but we do not act on the left sides of R in 3.1
         // assert that all rules in R are oriented according to the lpo
         #[cfg(debug_assertions)]
-        for rule in kbe.R.iter() {
+        for rule in kbe.R.iter_all() {
             let (l, r) = rule;
             if !lpo(l, r) {
                 panic!("Rule not oriented: {:?} > {:?}", strterm(l), strterm(r));
@@ -867,7 +895,8 @@ fn main() {
         // new rules should always be ground and are already oriented
         // however, rules are not considered in mutual simplification => need first be added to E
         // 3.2 will take care of the simplification
-        kbe.E.extend(new_rules);
+        // kbe.E.extend(new_rules);
+        kbe.E.staged.extend(new_rules);
         step31_total += step31_start.elapsed();
 
 
@@ -885,17 +914,71 @@ fn main() {
         measure_block!("cp_construction", 
         {
             // let rules = kbe.R.clone();
-            let mut rules;
+            // let mut rules;
+
+            // rules = kbe.R.staged.iter().map(|(l,r)| (l,r)).collect::<Vec<_>>();
+            // rules.extend(kbe.E.staged.iter().map(|(l, r)| (l, r)));
+            // rules.extend(kbe.E.staged.iter().map(|(l, r)| (r, l)));
+
+            // let mut all_rules = rules.iter().cloned().collect::<Vec<_>>();
+            // all_rules.extend(kbe.R.current.iter().map(|(l, r)| (l, r)));
+            // all_rules.extend(kbe.E.current.iter().map(|(l, r)| (l, r)));
+            // all_rules.extend(kbe.E.current.iter().map(|(l, r)| (r, l)));
+
+            // if i == 0 {
+            //     // in first iteration, also use current => original critical pairs
+            //     rules.extend(kbe.R.current.iter().map(|(l, r)| (l, r)));
+            //     rules.extend(kbe.E.current.iter().map(|(l, r)| (l, r)));
+            //     rules.extend(kbe.E.current.iter().map(|(l, r)| (r, l)));
+            // }
+            let mut rule_pairs = vec![];
+            let staged = kbe.R.staged.iter().map(|(l, r)| (l, r))
+                .chain(kbe.E.staged.iter().map(|(l, r)| (l, r)))
+                .chain(kbe.E.staged.iter().map(|(l, r)| (r, l)))
+                .collect::<Vec<_>>();
+            let current = kbe.R.current.iter().map(|(l, r)| (l, r))
+                .chain(kbe.E.current.iter().map(|(l, r)| (l, r)))
+                .chain(kbe.E.current.iter().map(|(l, r)| (r, l)))
+                .collect::<Vec<_>>();
+            // RS,ES1,ES2 + RC,EC1,EC2
+            for rule1 in staged.iter() {
+                for rule2 in current.iter() {
+                    rule_pairs.push((rule1.clone(), rule2.clone()));
+                }
+            }
+            // in stages but each pair only once 
+            for (i, rule1) in staged.iter().enumerate() {
+                for (j, rule2) in current.iter().enumerate() {
+                    if i > j {
+                        continue;
+                    }
+                    rule_pairs.push((rule1.clone(), rule2.clone()));
+                }
+            }
+            // in current if iter is 0
+            if i == 0 {
+                for (i, rule1) in current.iter().enumerate() {
+                    for (j, rule2) in current.iter().enumerate() {
+                        if i > j {
+                            continue;
+                        }
+                        rule_pairs.push((rule1.clone(), rule2.clone()));
+                    }
+                }
+            }
+            
+            
             // R + E in both direction
-                measure_block!("prepare", {
-                    rules =  kbe.R.iter().map(|(l, r)| (l, r)).collect::<Vec<_>>();
-            rules.extend(kbe.E.iter().map(|(l, r)| (l, r)));
-            rules.extend(kbe.E.iter().map(|(l, r)| (r, l)));
-                });
+            //     measure_block!("prepare", {
+            //         rules =  kbe.R.iter_all().map(|(l, r)| (l, r)).collect::<Vec<_>>();
+            // rules.extend(kbe.E.iter_all().map(|(l, r)| (l, r)));
+            // rules.extend(kbe.E.iter_all().map(|(l, r)| (r, l)));
+            //     });
             // Use the global cache across iterations
             // Per-iteration normalization cache used by linorm_cached
+            let norm_rules = kbe.R.iter_all().collect::<Vec<_>>();
             let mut norm_cache: HashMap<Term, Term> = HashMap::new();
-            let mut normalize = |t: &Term| -> Term { linorm_cached(&kbe.R, t, &mut norm_cache) };
+            let mut normalize = |t: &Term| -> Term { linorm_cached(&norm_rules, t, &mut norm_cache) };
         // let rules = kbe.R.iter().flat_map(|(l, r)| {
         //     vec![
         //         (l.clone(), r.clone()), // add original rule
@@ -906,41 +989,45 @@ fn main() {
                 measure_block!("for", {
         // for (i, rule1) in rules.iter().enumerate() {
         //     for (j, rule2) in rules.iter().enumerate() {
-        for j in 0..rules.len() {
-            let rule2 = rules[j];
-            for i in 0..(j+1) {
-                // if i > j {
-                //     continue; // only consider pairs once
+        // for j in 0..rules.len() {
+        //     let rule2 = rules[j];
+        // // for j in 0..all_rules.len() {
+        // //     let rule2 = all_rules[j];
+        //     for i in 0..all_rules.len() {
+        //         // if i > j {
+        //         //     continue; // only consider pairs once
+        //         // }
+        //         let rule1 = all_rules[i];
+        for (rule1, rule2) in rule_pairs.iter() {
+            {
+                // let key;
+                // measure_block!("cached_cp", {
+                // // Use owned Term pairs as cache key so mutations to rule sets don't affect identity
+                // key = (
+                //     (rule1.0.clone(), rule1.1.clone()),
+                //     (rule2.0.clone(), rule2.1.clone())
+                // );
+                // if let Some(cached_raw_cp) = critical_pair_cache.get(&key) {
+                //     // cps.extend(cached_raw_cp.clone());
+                //     // Re-simplify cached raw CPs using the current R and filter against current R/E
+                //     let simpl_cp = cached_raw_cp
+                //         .iter()
+                //         .cloned()
+                //         // .map(|(l, r)| {
+                //         //     let l_prime = normalize(&l);
+                //         //     let r_prime = normalize(&r);
+                //         //     (l_prime, r_prime)
+                //         // })
+                //         .filter(|(l, r)| {
+                //             l != r
+                //             && !kbe.E.iter().any(|eq| sameeq(eq, &(l.clone(), r.clone())))
+                //             && !kbe.R.iter().any(|rule| sameeq(rule, &(l.clone(), r.clone())))
+                //         })
+                //         .collect::<Vec<_>>();
+                //     cps.extend(simpl_cp);
+                //     continue;
                 // }
-                let rule1 = rules[i];
-                let key;
-                measure_block!("cached_cp", {
-                // Use owned Term pairs as cache key so mutations to rule sets don't affect identity
-                key = (
-                    (rule1.0.clone(), rule1.1.clone()),
-                    (rule2.0.clone(), rule2.1.clone())
-                );
-                if let Some(cached_raw_cp) = critical_pair_cache.get(&key) {
-                    // cps.extend(cached_raw_cp.clone());
-                    // Re-simplify cached raw CPs using the current R and filter against current R/E
-                    let simpl_cp = cached_raw_cp
-                        .iter()
-                        .cloned()
-                        // .map(|(l, r)| {
-                        //     let l_prime = normalize(&l);
-                        //     let r_prime = normalize(&r);
-                        //     (l_prime, r_prime)
-                        // })
-                        .filter(|(l, r)| {
-                            l != r
-                            && !kbe.E.iter().any(|eq| sameeq(eq, &(l.clone(), r.clone())))
-                            && !kbe.R.iter().any(|rule| sameeq(rule, &(l.clone(), r.clone())))
-                        })
-                        .collect::<Vec<_>>();
-                    cps.extend(simpl_cp);
-                    continue;
-                }
-                });
+                // });
                 measure_block!("new_cp_construction", {
                 #[cfg(debug_assertions)]
                 println!(
@@ -975,8 +1062,10 @@ fn main() {
                     .filter(|(l, r)| {
                         // only keep if not trivial
                         l != r
-                        && !kbe.E.iter().any(|eq| sameeq_ref((&eq.0,&eq.1), (l, r)))
-                        && !kbe.R.iter().any(|rule| sameeq_ref((&rule.0,&rule.1), (l, r)))
+                        && !kbe.E.iter_all().any(|eq| sameeq_ref((&eq.0,&eq.1), (l, r)))
+                        && !kbe.R.iter_all().any(|rule| sameeq_ref((&rule.0,&rule.1), (l, r)))
+                        && !cps.iter().any(|cp:&(Term,Term)| sameeq_ref((&cp.0,&cp.1), (l, r)))
+
                         // && !kbe.E.contains(&(l.clone(), r.clone())) 
                         // && !kbe.E.contains(&(r.clone(), l.clone())) 
                         // && !kbe.R.iter().any(|(l_r, r_r)| (l == l_r && r == r_r) || (l == r_r && r == l_r))
@@ -994,12 +1083,12 @@ fn main() {
                     );
                 }
                 // Insert with deterministic key order
-                let key_sorted = if fingerprint(&key.0.0) < fingerprint(&key.1.0) {
-                    key
-                } else {
-                    (key.1.clone(), key.0.clone())
-                };
-                critical_pair_cache.insert(key_sorted, simpl_cp.clone());
+                // let key_sorted = if fingerprint(&key.0.0) < fingerprint(&key.1.0) {
+                //     key
+                // } else {
+                //     (key.1.clone(), key.0.clone())
+                // };
+                // critical_pair_cache.insert(key_sorted, simpl_cp.clone());
                 cps.extend(simpl_cp);
                 });
             }
@@ -1013,9 +1102,10 @@ fn main() {
 
         // for each node in C, search if a cps applies, count how often
         // Dedup + deterministic ordering of CPs
-        let mut counted_cps = cps
+        let counted_cps = cps
             .iter()
-            // .cloned()
+            // TODO: clone unnecessary?
+            .cloned() 
 
             // dedup for testing, TODO: should not be necessary
             .collect::<HashSet<_>>()
@@ -1055,7 +1145,7 @@ fn main() {
                 // }
 
                 let mut rule_count = 0;
-                for (l_rule, r_rule) in kbe.R.iter() {
+                for (l_rule, r_rule) in kbe.R.iter_all() {
                     if term_contains(&l_rule, &l) {
                         rule_count += 1;
                     }
@@ -1078,21 +1168,35 @@ fn main() {
             })
             .collect::<Vec<_>>();
 
-        counted_cps.sort_by(|((l1, r1), (c1, rc1, s1)), ((l2, r2), (c2, rc2, s2))| {
-            s1.cmp(s2)
-                .then_with(|| rc2.cmp(rc1))
-                .then_with(|| c2.cmp(c1))
-                .then_with(|| fingerprint(l1).cmp(&fingerprint(l2)))
-                .then_with(|| fingerprint(r1).cmp(&fingerprint(r2)))
-        });
+        for ((l,r), (count, rule_count, size)) in counted_cps.iter() {
+            // TODO: clone unnecessary?
+            // critical_pair_queue.push((l.clone(), r.clone()), (*size, *rule_count, *count));
+            critical_pair_queue.push((l.clone(), r.clone()), Reverse((*size, *rule_count, *count)));
+        }
+
+        // counted_cps.sort_by(|((l1, r1), (c1, rc1, s1)), ((l2, r2), (c2, rc2, s2))| {
+        //     s1.cmp(s2)
+        //         .then_with(|| rc2.cmp(rc1))
+        //         .then_with(|| c2.cmp(c1))
+        //         .then_with(|| fingerprint(l1).cmp(&fingerprint(l2)))
+        //         .then_with(|| fingerprint(r1).cmp(&fingerprint(r2)))
+        // });
+
+        let mut top_cps = vec![];
+        while let Some(((l,r), _priority)) = critical_pair_queue.pop() {
+            top_cps.push((l,r));
+            if top_cps.len() >= 5 {
+                break;
+            }
+        }
 
         // take top 5 to extend E
-        let top_cps = counted_cps
-            .into_iter()
-            .take(5)
-            .map(|(cp, _)| cp)
-            // .map(|((l,r), _)| (l.clone(), r.clone()))
-            .collect::<Vec<_>>();
+        // let top_cps = counted_cps
+        //     .into_iter()
+        //     .take(5)
+        //     .map(|(cp, _)| cp)
+        //     // .map(|((l,r), _)| (l.clone(), r.clone()))
+        //     .collect::<Vec<_>>();
         
         #[cfg(debug_assertions)]
         println!("Top 5 critical pairs:");
@@ -1100,30 +1204,41 @@ fn main() {
         for (l, r) in top_cps.iter() {
             println!("  {} = {}", strterm(l), strterm(r));
         }
-        kbe.E.extend(top_cps.into_iter().map(|(l, r)| (l.clone(), r.clone())));
-        step32_total += step32_start.elapsed();
 
-        #[cfg(debug_assertions)]
-        println!("Rules before KBC:");
-        #[cfg(debug_assertions)]
-        printrules(&kbe.R);
-
-
-        // kbo faster because only considers relevant critical pairs
-        let state = knuth_loop(true, &lpo, (kbe.R, kbe.E));
+        // to use the equations applied on the dag
+        let state = knuth_loop_staged(true, &lpo, (kbe.R, kbe.E));
         kbe.R = state.0;
         kbe.E = state.1;
 
+
+        kbe.E.commit();
+        kbe.R.commit();
+        kbe.E.staged.extend(top_cps.into_iter().map(|(l, r)| (l.clone(), r.clone())));
+        step32_total += step32_start.elapsed();
+
+        // #[cfg(debug_assertions)]
+        // println!("Rules before KBC:");
+        // #[cfg(debug_assertions)]
+        // printrules(&kbe.R);
+
+        // kbo faster because only considers relevant critical pairs
+        let state = knuth_loop_staged(true, &lpo, (kbe.R, kbe.E));
+        kbe.R = state.0;
+        kbe.E = state.1;
+
+        // debug_assert!(kbe.R.staged.is_empty());
+        // debug_assert!(kbe.E.staged.is_empty());
+
         println!("Intermediate State:");
         println!("Rules:");
-        printrules(&kbe.R);
+        printrules(&kbe.R.current);
         println!("Equations:");
-        printeqs(&kbe.E);
+        printeqs(&kbe.E.current);
 
         println!("Original:");
         println!("{}", strterm(&t));
         println!("Result:");
-        let t_prime = linorm(&kbe.R, &t);
+        let t_prime = linorm(&kbe.R.current, &t);
         let t_prime_str = strterm(&t_prime);
         println!("{}", t_prime_str);
 
