@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use either::Either;
 use once_cell::sync::Lazy;
+// use std::cell::RefCell;
+// use std::collections::HashSet as StdHashSet;
 
 
 use term_rewrite::uniquevar;
@@ -15,6 +17,10 @@ use crate::types::*;
 
 /// Simple memoization cache for LPO computations
 static LPO_CACHE: Lazy<Mutex<HashMap<(Term, Term), bool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+// thread_local! {
+//     static KBO_IN_PROGRESS: RefCell<StdHashSet<(Term, Term)>> = RefCell::new(StdHashSet::new());
+// }
 
 /// Clears the LPO cache to free memory
 // pub fn clear_lpo_cache() {
@@ -267,9 +273,59 @@ where
     }
 }
 
+fn lexicographic_kbo<F>(kbo: &F, xs: &[Term], ys: &[Term]) -> bool
+where
+    F: Fn(&Term, &Term) -> bool,
+{
+    if xs.is_empty() {
+        false // nothing is not greater than nothing (and also not greater than anything)
+    } else if ys.is_empty() {
+        true
+    } else {
+        let x = &xs[0];
+        let y = &ys[0];
+        // If the current head elements are syntactically equal, skip them and
+        // continue with the remaining tails. This avoids re-invoking the
+        // comparator on identical subterms, which can create recursion cycles.
+        if x == y {
+            return lexicographic_kbo(kbo, &xs[1..], &ys[1..]);
+        }
+        if kbo(x, y) { // x > y
+            true
+        } else if kbo(y, x) { // y > x
+            false
+        } else { // x not greater or smaller than y
+            lexicographic_kbo(kbo, &xs[1..], &ys[1..])
+        }
+    }
+}
+
+// we use ? for variable weight
+// restrictions: variable all same, smaller (or equal to all constants)
+// if one unary symbol has weight 0, it needs to be the largest symbol
+fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: bool) -> usize {
+    match t {
+        Term::Variable(v) => {
+            count.insert(v.clone(), count.get(&v).map(|c| *c).unwrap_or(0) + if increment { 1 } else { -1 });
+            w.iter().find(|(sym, _)| sym == &"?".into()).map(|(_, w)| *w).unwrap_or(0)},
+        Term::Function(f, ts) => 
+            w.iter()
+                .find(|(sym, _)| sym == f)
+                .map(|(_, w)| *w).unwrap_or(0) + 
+            ts.iter().map(|t| weight(w, t, count, increment)).sum::<usize>(),
+    }
+}
+
+fn is_unary_wrap(t:&Term, x: &VarSym) -> bool {
+    match t {
+        Term::Variable(v) => v == x,
+        Term::Function(_, ts) => ts.len() == 1 && is_unary_wrap(&ts[0], x),
+    }
+}
+
 /// The lexicographic path ordering (LPO) “greater–or–equal” relation with respect to `pre`.
 /// TODO: too expensive to compute
-fn lpo_ge(pre: &Precedence, t: &Term, t_prime: &Term) -> bool {
+pub fn kbo_gt(pre: &Precedence, w: &Weight, t: &Term, t_prime: &Term) -> bool {
     // Check cache first
     let key = (t.clone(), t_prime.clone());
     if let Ok(cache) = LPO_CACHE.lock() {
@@ -277,32 +333,93 @@ fn lpo_ge(pre: &Precedence, t: &Term, t_prime: &Term) -> bool {
             return result;
         }
     }
-    
-    // Compute the result
-    let result = match (t, t_prime) {
-        (_, Term::Variable(var_prime)) => vars(t).contains(var_prime),
-        (Term::Variable(_), _) => false,
-        (Term::Function(f, ts), Term::Function(f_prime, ts_prime)) => {
-            (
-            symbol_equal(pre, f, f_prime)
-                && lexicographic_greq(&|a, b| lpo_ge(pre, a, b), ts, ts_prime)
-                && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp))
-            ) || 
-            (
-symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp))
-            ) || 
-            (
-                ts.iter().any(|tpp| lpo_ge(pre, tpp, t_prime))
-            )
+
+    // Detect direct or mutual recursion on the same pair and short-circuit
+    // let already_in_progress = KBO_IN_PROGRESS.with(|set| {
+    //     let mut set_b = set.borrow_mut();
+    //     if set_b.contains(&key) {
+    //         true
+    //     } else {
+    //         set_b.insert(key.clone());
+    //         false
+    //     }
+    // });
+    // if already_in_progress {
+    //     return false;
+    // }
+
+    // if t == t_prime {
+    //     return false;
+    // }
+
+    let mut var_count = HashMap::new();
+    let wt = weight(w, t, &mut var_count, true);
+    let wt_prime = weight(w, t_prime, &mut var_count, false);
+    let mut _all_neg = true; // all vars <= 0, t_prime has more or same as t
+    let mut all_pos = true; // all vars >= 0, in t same or more than t_prime
+    for (_, count) in var_count.iter() {
+        if *count > 0 {
+            _all_neg = false;
+        }
+        if *count < 0 {
+            all_pos = false;
+        }
+    }
+    let result = {
+        if all_pos && wt > wt_prime {
+            true
+        } else 
+        // if all_neg && wt < wt_prime {
+        //     return false; // we do not just know !(t > t_prime) but we even know t_prime > t
+        // }
+        if wt < wt_prime {
+            // at least can not be greater
+            false
+        } else {
+
+        // we know w(t) = w(t')
+        
+        // Compute the result
+        match (t, t_prime) {
+            // t = f^n(x), t' = x
+            (Term::Function(_, _), Term::Variable(x)) => is_unary_wrap(t, x),
+            (Term::Function(f, ts), Term::Function(g, ts_prime)) => {
+                if f == g {
+                    // t = f(t1, ..., tn), t' = g(t1', ..., tn'), (t1, ..., tn) >lex (t1', ..., tn')
+                    lexicographic_kbo(&|a, b| kbo_gt(pre, w, a, b), ts, ts_prime)
+                } else {
+                    // t = f(...), t' = g(...), f > g
+                    let pt = pre.iter().find(|(sym, _)| sym == f).map(|(_, p)| *p);
+                    let pt_prime = pre.iter().find(|(sym, _)| sym == g).map(|(_, p)| *p);
+                    pt.is_some() && pt_prime.is_some() && pt > pt_prime
+                }
+            },
+            _ => false,
+    //         (_, Term::Variable(var_prime)) => vars(t).contains(var_prime),
+    //         (Term::Variable(_), _) => false,
+    //         (Term::Function(f, ts), Term::Function(f_prime, ts_prime)) => {
+    //             (
+    //             symbol_equal(pre, f, f_prime)
+    //                 && lexicographic_greq(&|a, b| lpo_ge(pre, weight, a, b), ts, ts_prime)
+    //                 && ts_prime.iter().all(|tpp| lpo_gt(pre, weight, t, tpp))
+    //             ) || 
+    //             (
+    // symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, weight, t, tpp))
+    //             ) || 
+    //             (
+    //                 ts.iter().any(|tpp| lpo_ge(pre, weight, tpp, t_prime))
+    //             )
 
 
-            // let option1 = symbol_equal(pre, f, f_prime)
-            //     && lexicographic_greq(&|a, b| lpo_ge(pre, a, b), ts, ts_prime)
-            //     && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
-            // let option2 =
-            //     symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
-            // let option3 = ts.iter().any(|tpp| lpo_ge(pre, tpp, t_prime));
-            // option1 || option2 || option3
+    //             // let option1 = symbol_equal(pre, f, f_prime)
+    //             //     && lexicographic_greq(&|a, b| lpo_ge(pre, a, b), ts, ts_prime)
+    //             //     && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
+    //             // let option2 =
+    //             //     symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
+    //             // let option3 = ts.iter().any(|tpp| lpo_ge(pre, tpp, t_prime));
+    //             // option1 || option2 || option3
+    //         }
+        }
         }
     };
     
@@ -310,14 +427,15 @@ symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp)
     if let Ok(mut cache) = LPO_CACHE.lock() {
         cache.insert(key, result);
     }
+    // KBO_IN_PROGRESS.with(|set| { set.borrow_mut().remove(&(t.clone(), t_prime.clone())); });
     
     result
 }
 
 /// The strict part of `lpo_ge`.
-pub fn lpo_gt(pre: &Precedence, t: &Term, t_prime: &Term) -> bool {
-    lpo_ge(pre, t, t_prime) && !lpo_ge(pre, t_prime, t)
-}
+// pub fn lpo_gt(pre: &Precedence, weight: &Weight, t: &Term, t_prime: &Term) -> bool {
+//     lpo_ge(pre, weight, t, t_prime) && !lpo_ge(pre, weight, t_prime, t)
+// }
 
 
 // fn kbo_ge(pre: &Precedence, t: &Term, t_prime: &Term) -> bool {

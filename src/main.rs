@@ -791,7 +791,15 @@ fn main() {
     }
 
     // Step 0 (define precedence)
-    let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
+    // let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
+    // every symbol weight 1
+    let mut weight = vec![];
+    // variable weight
+    weight.push(("?".into(), 0));
+    for (symbol, _) in pre.iter() {
+        weight.push((symbol.clone(), 1));
+    }
+    let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &weight, t, t_prime);
 
     #[cfg(debug_assertions)]
     {
