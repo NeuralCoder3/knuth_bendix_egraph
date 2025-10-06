@@ -1,0 +1,3 @@
+M(E, x) = x
+M(M(x, y), z) = M(x, M(y, z))
+M(I(x), x) = E

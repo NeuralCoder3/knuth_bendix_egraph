@@ -1,0 +1,6 @@
+Plus(x,Plus(y,z))=Plus(Plus(x,y),z)
+Plus(x,y)=Plus(y,x)
+Times(x,Plus(y,z))=Plus(Times(x,y),Times(x,z))
+Times(Plus(x,y),z)=Plus(Times(x,z),Times(y,z))
+Times(x,Zero)=Zero
+Times(x,One)=x
