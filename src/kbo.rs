@@ -296,6 +296,7 @@ where
             false
         } else { // x not greater or smaller than y
             lexicographic_kbo(kbo, &xs[1..], &ys[1..])
+            // false
         }
     }
 }
@@ -316,10 +317,10 @@ fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: boo
     }
 }
 
-fn is_unary_wrap(t:&Term, x: &VarSym) -> bool {
+fn is_unary_wrap(t:&Term, x: &VarSym, symbol: Option<&FunSym>) -> bool {
     match t {
         Term::Variable(v) => v == x,
-        Term::Function(_, ts) => ts.len() == 1 && is_unary_wrap(&ts[0], x),
+        Term::Function(f, ts) => ts.len() == 1 && is_unary_wrap(&ts[0], x, Some(f)) && (symbol.is_none() || symbol.unwrap() == f)
     }
 }
 
@@ -366,7 +367,9 @@ pub fn kbo_gt(pre: &Precedence, w: &Weight, t: &Term, t_prime: &Term) -> bool {
         }
     }
     let result = {
-        if all_pos && wt > wt_prime {
+        if !all_pos {
+            false
+        } else if wt > wt_prime {
             true
         } else 
         // if all_neg && wt < wt_prime {
@@ -382,7 +385,9 @@ pub fn kbo_gt(pre: &Precedence, w: &Weight, t: &Term, t_prime: &Term) -> bool {
         // Compute the result
         match (t, t_prime) {
             // t = f^n(x), t' = x
-            (Term::Function(_, _), Term::Variable(x)) => is_unary_wrap(t, x),
+            // we know the variable is a subterm => contained (by variable count)
+            (Term::Function(_, _), Term::Variable(_)) => true,
+            // (Term::Function(_, _), Term::Variable(x)) => is_unary_wrap(t, x, None),
             (Term::Function(f, ts), Term::Function(g, ts_prime)) => {
                 if f == g {
                     // t = f(t1, ..., tn), t' = g(t1', ..., tn'), (t1, ..., tn) >lex (t1', ..., tn')
@@ -392,6 +397,7 @@ pub fn kbo_gt(pre: &Precedence, w: &Weight, t: &Term, t_prime: &Term) -> bool {
                     let pt = pre.iter().find(|(sym, _)| sym == f).map(|(_, p)| *p);
                     let pt_prime = pre.iter().find(|(sym, _)| sym == g).map(|(_, p)| *p);
                     pt.is_some() && pt_prime.is_some() && pt > pt_prime
+                    // TODO: need to check t > all elements of list
                 }
             },
             _ => false,

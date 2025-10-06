@@ -799,6 +799,9 @@ fn main() {
     for (symbol, _) in pre.iter() {
         weight.push((symbol.clone(), 1));
     }
+    // for (symbol, count) in pre.iter() {
+    //     weight.push((symbol.clone(), (1+count) as usize));
+    // }
     let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &weight, t, t_prime);
 
     #[cfg(debug_assertions)]
@@ -821,11 +824,11 @@ fn main() {
     kbe.R = state.0;
     kbe.E = state.1;
 
-    kbe.R.commit();
-    kbe.E.commit();
+    // kbe.R.commit();
+    // kbe.E.commit();
 
-
-    
+    // assert!(kbe.R.current.is_empty());
+    // assert!(kbe.E.current.is_empty());
 
 
     let t_prime = linorm(&kbe.R.current, &t);
@@ -956,7 +959,7 @@ fn main() {
             }
             // in stages but each pair only once 
             for (i, rule1) in staged.iter().enumerate() {
-                for (j, rule2) in current.iter().enumerate() {
+                for (j, rule2) in staged.iter().enumerate() {
                     if i > j {
                         continue;
                     }
@@ -964,16 +967,16 @@ fn main() {
                 }
             }
             // in current if iter is 0
-            if i == 0 {
-                for (i, rule1) in current.iter().enumerate() {
-                    for (j, rule2) in current.iter().enumerate() {
-                        if i > j {
-                            continue;
-                        }
-                        rule_pairs.push((rule1.clone(), rule2.clone()));
-                    }
-                }
-            }
+            // if i == 0 {
+                // for (i, rule1) in current.iter().enumerate() {
+                //     for (j, rule2) in current.iter().enumerate() {
+                //         if i > j {
+                //             continue;
+                //         }
+                //         rule_pairs.push((rule1.clone(), rule2.clone()));
+                //     }
+                // }
+            // }
             
             
             // R + E in both direction
@@ -1037,6 +1040,9 @@ fn main() {
                 // }
                 // });
                 measure_block!("new_cp_construction", {
+                let cp = critical_pair_ref((rule1.0, rule1.1), (rule2.0, rule2.1));
+                #[cfg(debug_assertions)]
+                if cp.len() > 0 {
                 #[cfg(debug_assertions)]
                 println!(
                     "DBG: Critical pair: {} -> {} with {} -> {}",
@@ -1045,7 +1051,6 @@ fn main() {
                     strterm(&rule2.0),
                     strterm(&rule2.1)
                 );
-                let cp = critical_pair_ref((rule1.0, rule1.1), (rule2.0, rule2.1));
                 // let cp = critical_pair(&key.0, &key.1);
                 #[cfg(debug_assertions)]
                 for (c_l, c_r) in cp.iter() {
@@ -1054,6 +1059,7 @@ fn main() {
                         strterm(c_l),
                         strterm(c_r)
                     );
+                }
                 }
 
                 // simplify using R
@@ -1179,7 +1185,10 @@ fn main() {
         for ((l,r), (count, rule_count, size)) in counted_cps.iter() {
             // TODO: clone unnecessary?
             // critical_pair_queue.push((l.clone(), r.clone()), (*size, *rule_count, *count));
+
             critical_pair_queue.push((l.clone(), r.clone()), Reverse((*size, *rule_count, *count)));
+            // critical_pair_queue.push((l.clone(), r.clone()), Reverse((*rule_count, *count)));
+            // critical_pair_queue.push((l.clone(), r.clone()), Reverse((*size+ *rule_count+ *count)));
         }
 
         // counted_cps.sort_by(|((l1, r1), (c1, rc1, s1)), ((l2, r2), (c2, rc2, s2))| {
