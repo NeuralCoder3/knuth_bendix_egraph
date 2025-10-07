@@ -793,16 +793,16 @@ fn main() {
     // Step 0 (define precedence)
     // let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
     // every symbol weight 1
-    let mut weight = vec![];
+    let mut w = vec![];
     // variable weight
-    weight.push(("?".into(), 0));
+    w.push(("?".into(), 0));
     for (symbol, _) in pre.iter() {
-        weight.push((symbol.clone(), 1));
+        w.push((symbol.clone(), 1));
     }
     // for (symbol, count) in pre.iter() {
     //     weight.push((symbol.clone(), (1+count) as usize));
     // }
-    let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &weight, t, t_prime);
+    let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &w, t, t_prime);
 
     #[cfg(debug_assertions)]
     {
@@ -1116,7 +1116,7 @@ fn main() {
 
         // for each node in C, search if a cps applies, count how often
         // Dedup + deterministic ordering of CPs
-        let counted_cps = cps
+        let mut counted_cps = cps
             .iter()
             // TODO: clone unnecessary?
             .cloned() 
@@ -1176,19 +1176,44 @@ fn main() {
 
                 // let size = (strterm(&l).len() + strterm(&r).len()) as i32;
                 // let size = nodes(&l) + nodes(&r);
-                let size = term_size(&pre, &l) + term_size(&pre, &r);
+                // let size = term_size(&pre, &l) + term_size(&pre, &r);
+                let size = term_weight(&w, &l) + term_weight(&w, &r);
 
                 ((l,r), (count, rule_count, size))
             })
             .collect::<Vec<_>>();
 
-        for ((l,r), (count, rule_count, size)) in counted_cps.iter() {
+        let comparison_key = |((l,r), (count, rule_count, size)): ((&Term, &Term), (i32, i32, usize))| {
+            // (-count, size, -rule_count)
+            // (-count, -rule_count, size)
+            (size,-count, -rule_count)
+        };
+
+        #[cfg(debug_assertions)]
+        {
+            counted_cps.sort_by_key(|((l,r), (count, rule_count, size))| comparison_key(((&l,&r),(*count,*rule_count,*size))));
+            let print_count = 500000;
+            println!("Printing critical pairs:");
+            for ((l,r), (count, rule_count, size)) in counted_cps.iter().take(print_count) {
+                println!("  {} = {} (S={}, C={}, R={})", strterm(l), strterm(r), size, count, rule_count);
+            }
+        }
+
+        for ((l,r), (count, rule_count, size)) in counted_cps.into_iter() {
             // TODO: clone unnecessary?
             // critical_pair_queue.push((l.clone(), r.clone()), (*size, *rule_count, *count));
 
-            critical_pair_queue.push((l.clone(), r.clone()), Reverse((*size, *rule_count, *count)));
+            // critical_pair_queue.push((l.clone(), r.clone()), Reverse((*size, *rule_count, *count)));
+            // critical_pair_queue.push((l.clone(), r.clone()), Reverse((*size, -*count, -*rule_count)));
+            // critical_pair_queue.push((l.clone(), r.clone()), Reverse((-*count, *size, -*rule_count)));
             // critical_pair_queue.push((l.clone(), r.clone()), Reverse((*rule_count, *count)));
             // critical_pair_queue.push((l.clone(), r.clone()), Reverse((*size+ *rule_count+ *count)));
+
+
+            // big count good, small size good, big rule count good
+            // small key means good
+            let key = comparison_key(((&l,&r),(count,rule_count,size)));
+            critical_pair_queue.push((l, r), Reverse(key));
         }
 
         // counted_cps.sort_by(|((l1, r1), (c1, rc1, s1)), ((l2, r2), (c2, rc2, s2))| {
@@ -1199,10 +1224,13 @@ fn main() {
         //         .then_with(|| fingerprint(r1).cmp(&fingerprint(r2)))
         // });
 
+        let critical_pair_count = 5;
+        // let critical_pair_count = 50;
+        // let critical_pair_count = critical_pair_queue.len()/4;
         let mut top_cps = vec![];
         while let Some(((l,r), _priority)) = critical_pair_queue.pop() {
             top_cps.push((l,r));
-            if top_cps.len() >= 5 {
+            if top_cps.len() >= critical_pair_count {
                 break;
             }
         }
@@ -1215,9 +1243,9 @@ fn main() {
         //     // .map(|((l,r), _)| (l.clone(), r.clone()))
         //     .collect::<Vec<_>>();
         
-        #[cfg(debug_assertions)]
-        println!("Top 5 critical pairs:");
-        #[cfg(debug_assertions)]
+        // #[cfg(debug_assertions)]
+        println!("Top {} critical pairs:", critical_pair_count);
+        // #[cfg(debug_assertions)]
         for (l, r) in top_cps.iter() {
             println!("  {} = {}", strterm(l), strterm(r));
         }
@@ -1247,10 +1275,10 @@ fn main() {
         // debug_assert!(kbe.E.staged.is_empty());
 
         println!("Intermediate State:");
-        println!("Rules:");
-        printrules(&kbe.R.current);
-        println!("Equations:");
-        printeqs(&kbe.E.current);
+        println!("Rules (all):");
+        printrules_ref(&kbe.R.iter_all().collect::<Vec<_>>());
+        println!("Equations (all):");
+        printeqs_ref(&kbe.E.iter_all().collect::<Vec<_>>());
 
         println!("Original:");
         println!("{}", strterm(&t));

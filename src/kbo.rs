@@ -317,6 +317,18 @@ fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: boo
     }
 }
 
+pub fn term_weight(w: &Weight, t: &Term) -> usize {
+    match t {
+        Term::Variable(_) => {
+            w.iter().find(|(sym, _)| sym == &"?".into()).map(|(_, w)| *w).unwrap_or(0)},
+        Term::Function(f, ts) => 
+            w.iter()
+                .find(|(sym, _)| sym == f)
+                .map(|(_, w)| *w).unwrap_or(0) + 
+            ts.iter().map(|t| term_weight(w, t)).sum::<usize>(),
+    }
+}
+
 fn is_unary_wrap(t:&Term, x: &VarSym, symbol: Option<&FunSym>) -> bool {
     match t {
         Term::Variable(v) => v == x,

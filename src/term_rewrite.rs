@@ -738,6 +738,16 @@ pub fn streq(eq: &Equation) -> String {
     format!("{} = {}", strterm(l), strterm(r))
 }
 
+pub fn strrule_ref(rule: &&Rule) -> String {
+    let (l, r) = rule;
+    format!("{} -> {}", strterm(l), strterm(r))
+}
+
+pub fn streq_ref(eq: &&Equation) -> String {
+    let (l, r) = eq;
+    format!("{} = {}", strterm(l), strterm(r))
+}
+
 /// [strtermtuplessub f xs] helps format a list by applying [f] to each element.
 pub fn strtermtuplessub<F, T>(f: F, xs: &[T]) -> String
 where
@@ -799,4 +809,12 @@ pub fn printrules(rs: &RuleSet) {
 /// [printeqs eqs] prints an equationset.
 pub fn printeqs(eqs: &EquationSet) {
     println!("{}", streqs(eqs));
+}
+
+
+pub fn printrules_ref(rs: &Vec<&Rule>) {
+    println!("{}", strtermtuples(strrule_ref, rs));
+}
+pub fn printeqs_ref(eqs: &Vec<&Equation>) {
+    println!("{}", strtermtuples(streq_ref, eqs));
 }
