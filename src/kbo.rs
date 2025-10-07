@@ -726,3 +726,57 @@ pub fn term_size(pre: &Precedence, t: &Term) -> usize
             pre.iter().find(|(f_prime, _)| f_prime == f).unwrap().1 as usize + ts.iter().map(|t| term_size(pre, t)).sum::<usize>()
     }
 }
+
+
+fn lpo_ge(pre: &Precedence, t: &Term, t_prime: &Term) -> bool {
+    // Check cache first
+    let key = (t.clone(), t_prime.clone());
+    if let Ok(cache) = LPO_CACHE.lock() {
+        if let Some(&result) = cache.get(&key) {
+            return result;
+        }
+    }
+    
+    // Compute the result
+    let result = match (t, t_prime) {
+        (_, Term::Variable(var_prime)) => vars(t).contains(var_prime),
+        (Term::Variable(_), _) => false,
+        (Term::Function(f, ts), Term::Function(f_prime, ts_prime)) => {
+            (
+            symbol_equal(pre, f, f_prime)
+                && lexicographic_greq(&|a, b| lpo_ge(pre, a, b), ts, ts_prime)
+                && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp))
+            ) || 
+            (
+symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp))
+            ) || 
+            (
+                ts.iter().any(|tpp| lpo_ge(pre, tpp, t_prime))
+            )
+
+
+            // let option1 = symbol_equal(pre, f, f_prime)
+            //     && lexicographic_greq(&|a, b| lpo_ge(pre, a, b), ts, ts_prime)
+            //     && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
+            // let option2 =
+            //     symbol_greater(pre, f, f_prime) && ts_prime.iter().all(|tpp| lpo_gt(pre, t, tpp));
+            // let option3 = ts.iter().any(|tpp| lpo_ge(pre, tpp, t_prime));
+            // option1 || option2 || option3
+
+        }
+    };
+
+    // Store result in cache
+    if let Ok(mut cache) = LPO_CACHE.lock() {
+        cache.insert(key, result);
+    }
+
+
+    result
+}
+
+
+pub fn lpo_gt(pre: &Precedence, t: &Term, t_prime: &Term) -> bool {
+    lpo_ge(pre, t, t_prime) && !lpo_ge(pre, t_prime, t)
+}
+

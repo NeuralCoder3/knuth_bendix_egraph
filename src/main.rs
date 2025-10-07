@@ -802,7 +802,8 @@ fn main() {
     // for (symbol, count) in pre.iter() {
     //     weight.push((symbol.clone(), (1+count) as usize));
     // }
-    let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &w, t, t_prime);
+    // let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &w, t, t_prime);
+    let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
     #[cfg(debug_assertions)]
     {
