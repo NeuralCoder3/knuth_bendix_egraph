@@ -544,6 +544,7 @@ pub fn parsefunsym(s: &str) -> String {
 /// [parseargexpssub s n] is a helper that parses a (possibly parenthesized) list of argument expressions.
 /// It returns a tuple of a string and a vector of strings.
 pub fn parseargexpssub(s: &str, n: i32) -> (String, Vec<String>) {
+    let s = s.trim();
     if s.is_empty() {
         if n == 0 {
             ("".to_string(), vec![])
@@ -568,7 +569,7 @@ pub fn parseargexpssub(s: &str, n: i32) -> (String, Vec<String>) {
                 new_exps.append(&mut exps);
                 ("".to_string(), new_exps)
             }
-            (0, _) => panic!("ParseError"),
+            (0, x) => panic!("ParseError: unexpected char '{x}'"),
             (1, ')') => {
                 let (s_prime, exps) = parseargexpssub(rest, 0);
                 if s_prime == "" && exps.is_empty() {
