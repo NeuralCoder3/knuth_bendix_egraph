@@ -8,8 +8,8 @@ use bimap::BiMap;
 use clap::Parser;
 // use std::collections::HashMap;
 // use std::collections::HashSet;
-use hashbrown::HashSet;
-use hashbrown::HashMap;
+use fxhash::FxHashSet as HashSet;
+use fxhash::FxHashMap as HashMap;
 use priority_queue::PriorityQueue;
 use std::cmp::Reverse;
 use std::io::stdout;
@@ -346,7 +346,7 @@ where
         }
 
         // To avoid overlapping rewrites:
-        let mut already_replaced = HashSet::new();
+        let mut already_replaced = HashSet::default();
         // Deterministic application order for rewrites
         rewrites.sort_by(|(id1, l1, r1), (id2, l2, r2)| {
             id1.cmp(id2)
@@ -535,7 +535,7 @@ fn canonicalize_dag(kbe: &mut KBEDAG) {
 
 fn cleanup_dag(kbe: &mut KBEDAG, root: Id) {
     // Compute set of nodes reachable from the (resolved) root via resolved children
-    let mut reachable: HashSet<Id> = HashSet::new();
+    let mut reachable: HashSet<Id> = HashSet::default();
     let mut stack: Vec<Id> = vec![resolve_id(kbe, root)];
 
     while let Some(id) = stack.pop() {
@@ -644,7 +644,7 @@ fn main() {
         dag: KBEDAG { 
             C: BiMap::new(),
             id_count: 0,
-            S: HashMap::new(),
+            S: HashMap::default(),
         },
         E: StagedVec::new(vec![]),
         R: StagedVec::new(vec![]),
@@ -740,7 +740,7 @@ fn main() {
     }
 
     // compute precedence by occurence count often => higher
-    let mut symbol_counts = HashMap::new();
+    let mut symbol_counts = HashMap::default();
     count_symbols(&t, &mut symbol_counts);
     // set each to zero
     for (_, count) in symbol_counts.iter_mut() {
@@ -852,7 +852,7 @@ fn main() {
     let mut step31_total = std::time::Duration::from_secs(0);
     let mut step32_total = std::time::Duration::from_secs(0);
     // Global critical pair cache across iterations, keyed by owned rule content
-    // let mut critical_pair_cache: HashMap<((Term, Term), (Term, Term)), Vec<(Term, Term)>> = HashMap::new();
+    // let mut critical_pair_cache: HashMap<((Term, Term), (Term, Term)), Vec<(Term, Term)>> = HashMap::default();
     let mut critical_pair_queue = PriorityQueue::new();
 
     // Step 3 (loop)
@@ -989,7 +989,7 @@ fn main() {
             // Use the global cache across iterations
             // Per-iteration normalization cache used by linorm_cached
             let norm_rules = kbe.R.iter_all().collect::<Vec<_>>();
-            let mut norm_cache: HashMap<Term, Term> = HashMap::new();
+            let mut norm_cache: HashMap<Term, Term> = HashMap::default();
             let mut normalize = |t: &Term| -> Term { linorm_cached(&norm_rules, t, &mut norm_cache) };
         // let rules = kbe.R.iter().flat_map(|(l, r)| {
         //     vec![

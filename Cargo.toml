@@ -13,10 +13,9 @@ memoize = "0.5.1"
 once_cell = "1.21.3"
 symbol_table = {version = "0.4.0", features = ["global"]}
 parking_lot = "0.12"
-hashbrown = "0.16"
-ahash = "0.8"
 hotpath = { version = "0.2", optional = true }
 priority-queue = "2.6.0"
+fxhash = "0.2.1"
 
 [[bin]]
 name = "main"
