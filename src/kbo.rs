@@ -317,10 +317,14 @@ fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: boo
     }
 }
 
+// for cp weight
+// variable 0, function symbols 1
 pub fn term_weight(w: &Weight, t: &Term) -> usize {
     match t {
         Term::Variable(_) => {
-            w.iter().find(|(sym, _)| sym == &"?".into()).map(|(_, w)| *w).unwrap_or(0)},
+            w.iter().find(|(sym, _)| sym == &"?".into()).map(|(_, w)| *w).unwrap_or(0)
+            // 0
+        },
         Term::Function(f, ts) => 
             w.iter()
                 .find(|(sym, _)| sym == f)

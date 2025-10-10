@@ -1178,29 +1178,37 @@ fn main() {
                 // let size = (strterm(&l).len() + strterm(&r).len()) as i32;
                 // let size = nodes(&l) + nodes(&r);
                 // let size = term_size(&pre, &l) + term_size(&pre, &r);
-                let size = term_weight(&w, &l) + term_weight(&w, &r);
+                let l_size = term_weight(&w, &l);
+                let r_size = term_weight(&w, &r);
+                // let size = term_weight(&w, &l) + term_weight(&w, &r);
+                // twee-like weight
+                // TODO: DAG weight
+                let size = if l_size > r_size { 4*l_size + r_size } else { l_size + 4*r_size };
+                let age = i;
 
-                ((l,r), (count, rule_count, size))
+                ((l,r), (count, rule_count, size, age))
             })
             .collect::<Vec<_>>();
 
-        let comparison_key = |((l,r), (count, rule_count, size)): ((&Term, &Term), (i32, i32, usize))| {
+        let comparison_key = |((l,r), (count, rule_count, size, age)): ((&Term, &Term), (i32, i32, usize, usize))| {
             // (-count, size, -rule_count)
             // (-count, -rule_count, size)
-            (size,-count, -rule_count)
+            (size, -count, -rule_count, age)
+            // (size, age, -count, -rule_count)
+            // (-count, size, -rule_count)
         };
 
         #[cfg(debug_assertions)]
         {
-            counted_cps.sort_by_key(|((l,r), (count, rule_count, size))| comparison_key(((&l,&r),(*count,*rule_count,*size))));
+            counted_cps.sort_by_key(|((l,r), (count, rule_count, size, age))| comparison_key(((&l,&r),(*count,*rule_count,*size,*age))));
             let print_count = 500000;
             println!("Printing critical pairs:");
-            for ((l,r), (count, rule_count, size)) in counted_cps.iter().take(print_count) {
+            for ((l,r), (count, rule_count, size, age)) in counted_cps.iter().take(print_count) {
                 println!("  {} = {} (S={}, C={}, R={})", strterm(l), strterm(r), size, count, rule_count);
             }
         }
 
-        for ((l,r), (count, rule_count, size)) in counted_cps.into_iter() {
+        for ((l,r), (count, rule_count, size, age)) in counted_cps.into_iter() {
             // TODO: clone unnecessary?
             // critical_pair_queue.push((l.clone(), r.clone()), (*size, *rule_count, *count));
 
@@ -1213,7 +1221,7 @@ fn main() {
 
             // big count good, small size good, big rule count good
             // small key means good
-            let key = comparison_key(((&l,&r),(count,rule_count,size)));
+            let key = comparison_key(((&l,&r),(count,rule_count,size,age)));
             critical_pair_queue.push((l, r), Reverse(key));
         }
 
