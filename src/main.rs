@@ -373,6 +373,8 @@ where
                 continue; // skip if already removed by a previous rewrite
             }
             // TODO: r_id might already exist => do not first create but only construct term
+            // TODO: is this term already constant folded?
+            let r = constant_fold(r, true);
             let r_id = insert_term(&r, kbe);
             kbe.C.remove_by_left(&id);
             debug_assert!(
@@ -634,6 +636,81 @@ struct Args {
     positional: Vec<String>,
 }
 
+fn is_constant(s: &FunSym) -> Option<i32> {
+    let r = match s.as_str() {
+        "Zero" => Some(0),
+        "One" => Some(1),
+        "Two" => Some(2),
+        "MinusOne" => Some(-1),
+        _ => None,
+    };
+    if let Some(c) = r {
+        Some(c)
+    } else {
+        // try parse as integer
+        let c = s.to_string().parse::<i32>();
+        if c.is_ok() {
+            Some(c.unwrap())
+        } else {
+            None
+        }
+    }
+}
+
+fn is_constant_term(t: &Term) -> Option<i32> {
+    match t {
+        Term::Variable(_) => None,
+        Term::Function(f, ts) => 
+        if ts.len() == 0 {
+            is_constant(f)
+        } else {
+            None
+        }
+    }
+}
+
+fn constant_fold(t: Term, recursive: bool) -> Term {
+    match t {
+        Term::Variable(_) => t,
+        Term::Function(f, ts) => {
+            let (f, ts) = if recursive {
+                (f, ts.into_iter().map(|t| constant_fold(t, recursive)).collect())
+            } else {
+                (f, ts)
+            };
+            if ts.len() == 0 {
+            } else if ts.len() == 1 {
+                if let Some(_c) = is_constant_term(&ts[0]) {
+                    // match f.as_str() {
+                    //     "-" => {
+                    //     }
+                    // }
+                }
+            } else if ts.len() == 2 {
+                if let Some(c1) = is_constant_term(&ts[0]) {
+                    if let Some(c2) = is_constant_term(&ts[1]) {
+                        // return t;
+                        let res = 
+                        match f.as_str() {
+                            "-" | "sub" => Some(c1-c2),
+                            "+" | "add" => Some(c1+c2),
+                            "*" | "mul" => Some(c1*c2),
+                            "/" | "div" => Some(c1/c2),
+                            "pow" => Some(c1.pow(c2 as u32)),
+                            _ => None
+                        };
+                        if let Some(res) = res {
+                            return Term::Function(GlobalSymbol::from(res.to_string()), vec![]);
+                        }
+                    }
+                }
+            }
+            return Term::Function(f, ts);
+        }
+    }
+}
+
+
 // You can configure any percentile between 0 and 100
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50,99]))]
 fn main() {
@@ -718,6 +795,10 @@ fn main() {
             parseterm(&term_arg)
         }
     };
+
+    // initial constant folding
+    kbe.E.staged = kbe.E.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+    let t = constant_fold(t, true);
 
     let t_id = insert_term(&t, &mut kbe.dag);
     let mut ids = kbe.dag.C.left_values().cloned().collect::<Vec<_>>();
@@ -824,6 +905,14 @@ fn main() {
     let state = knuth_loop_staged(true, &lpo, (kbe.R, kbe.E));
     kbe.R = state.0;
     kbe.E = state.1;
+
+    // constant fold everything, just to be sure
+    // TODO: only constant fold newly constructed terms
+    kbe.R.staged = kbe.R.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+    kbe.E.staged = kbe.E.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+    kbe.R.current = kbe.R.current.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+    kbe.E.current = kbe.E.current.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+
 
     // kbe.R.commit();
     // kbe.E.commit();
@@ -1279,6 +1368,13 @@ fn main() {
         let state = knuth_loop_staged(true, &lpo, (kbe.R, kbe.E));
         kbe.R = state.0;
         kbe.E = state.1;
+
+        // constant fold everything, just to be sure
+        // TODO: only constant fold newly constructed terms
+        kbe.R.staged = kbe.R.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+        kbe.E.staged = kbe.E.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+        kbe.R.current = kbe.R.current.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+        kbe.E.current = kbe.E.current.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
 
         // debug_assert!(kbe.R.staged.is_empty());
         // debug_assert!(kbe.E.staged.is_empty());
