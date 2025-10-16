@@ -485,7 +485,7 @@ pub fn small(chara: char) -> bool {
 
 /// Returns true if [chara] is one of the specified symbols.
 pub fn symbol(chara: char) -> bool {
-    matches!(chara, '+' | '*' | '!' | '?' | '-' | '/' | '^' | '$' | '%' | '&')
+    matches!(chara, '+' | '*' | '!' | '?' | '-' | '/' | '^' | '$' | '%' | '&' | '_')
 }
 
 /// Returns true if [chara] is alphanumeric or one of the allowed symbols.
@@ -512,7 +512,7 @@ pub fn parsevarsym(s: &str) -> String {
         } else if alphabet(first) {
             format!("{}{}", &s[0..first.len_utf8()], rest)
         } else {
-            panic!("ParseError")
+            panic!("ParseError: unexpected char '{}'", first)
         }
     }
 }
@@ -531,12 +531,12 @@ pub fn parsefunsym(s: &str) -> String {
             if rest.is_empty() {
                 "".to_string()
             } else {
-                panic!("ParseError")
+                panic!("ParseError: unexpected char '{}'", first)
             }
         } else if alphabet(first) {
             format!("{}{}", &s[0..first.len_utf8()], parsefunsym(&s[first.len_utf8()..]))
         } else {
-            panic!("ParseError")
+            panic!("ParseError: unexpected char '{}'", first)
         }
     }
 }
@@ -640,6 +640,7 @@ pub fn parseargs(exp: &str) -> Vec<Term> {
         match first {
             ' ' => parseargs(&s[first.len_utf8()..]),
             '(' => {
+                println!("parseargs: {}", s);
                 let args_strs = parseargexps(s);
                 args_strs.into_iter().map(|s| parseterm(&s)).collect()
             }

@@ -637,23 +637,36 @@ struct Args {
 }
 
 fn is_constant(s: &FunSym) -> Option<i32> {
+    // words
+    // -?\d+
+    // '-?\d+' (with quotes)
+    // NUM\d+
+    // NEGNUM\d+
+    let s = s.as_str().to_lowercase();
     let r = match s.as_str() {
-        "Zero" => Some(0),
-        "One" => Some(1),
-        "Two" => Some(2),
-        "MinusOne" => Some(-1),
+        "zero" => Some(0),
+        "one" => Some(1),
+        "two" => Some(2),
+        "minusone" => Some(-1),
         _ => None,
     };
     if let Some(c) = r {
-        Some(c)
+        return Some(c)
+    } 
+
+    // strip ' around string
+    let s = s.strip_prefix('\'').unwrap_or(&s).strip_suffix('\'').unwrap_or(&s);
+
+    // strip if start with NUM, replace NEGNUM with -
+    let s = s.replace("negnum", "-").replace("num", "");
+
+
+    // try parse as integer
+    let c = s.to_string().parse::<i32>();
+    if c.is_ok() {
+        Some(c.unwrap())
     } else {
-        // try parse as integer
-        let c = s.to_string().parse::<i32>();
-        if c.is_ok() {
-            Some(c.unwrap())
-        } else {
-            None
-        }
+        None
     }
 }
 
@@ -678,36 +691,69 @@ fn constant_fold(t: Term, recursive: bool) -> Term {
             } else {
                 (f, ts)
             };
+
+            let mut res = None;
+
             if ts.len() == 0 {
             } else if ts.len() == 1 {
-                if let Some(_c) = is_constant_term(&ts[0]) {
-                    // match f.as_str() {
-                    //     "-" => {
-                    //     }
-                    // }
+                if let Some(c) = is_constant_term(&ts[0]) {
+                    res = match f.as_str().to_lowercase().as_str() {
+                        "!" | "not" => Some(if c != 0 { 0 } else { 1 }),
+                        "neg" | "negate" => Some(-c),
+                        "abs" | "absolute" => Some(c.abs()),
+                        "is_const_pos" => Some(if c > 0 { 1 } else { 0 }),
+                        "is_const_neg" => Some(if c < 0 { 1 } else { 0 }),
+                        "is_not_zero" => Some(if c != 0 { 1 } else { 0 }),
+                        _ => None
+                    };
                 }
             } else if ts.len() == 2 {
                 if let Some(c1) = is_constant_term(&ts[0]) {
                     if let Some(c2) = is_constant_term(&ts[1]) {
-                        // return t;
-                        let res = 
-                        match f.as_str() {
-                            "-" | "sub" => Some(c1-c2),
-                            "+" | "add" => Some(c1+c2),
-                            "*" | "mul" => Some(c1*c2),
-                            "/" | "div" => Some(c1/c2),
+                        res = match f.as_str().to_lowercase().as_str() {
+                            "-" | "sub" | "minus" => Some(c1-c2),
+                            "+" | "add" | "plus" => Some(c1+c2),
+                            "*" | "mul" | "multiply" => Some(c1*c2),
+                            "/" | "div" | "divide" => Some(c1/c2),
+                            "<" | "lt" | "less" => Some(if c1 < c2 { 1 } else { 0 }),
+                            ">" | "gt" | "greater" => Some(if c1 > c2 { 1 } else { 0 }),
+                            "=" | "eq" | "equal" => Some(if c1 == c2 { 1 } else { 0 }),
+                            "!=" | "ne" | "neq" | "notequal" => Some(if c1 != c2 { 1 } else { 0 }),
+                            "<=" | "le" | "leq" | "lessequal" => Some(if c1 <= c2 { 1 } else { 0 }),
+                            ">=" | "ge" | "geq" | "greaterequal" => Some(if c1 >= c2 { 1 } else { 0 }),
+                            "%" | "mod" | "modulo" => Some(c1%c2),
+                            "&" | "and" | "land" => Some(if c1 != 0 && c2 != 0 { 1 } else { 0 }),
+                            "or" | "lor" => Some(if c1 != 0 || c2 != 0 { 1 } else { 0 }),
+                            "xor" | "lxor" => Some(if c1 != c2 { 1 } else { 0 }),
+                            "max" => Some(c1.max(c2)),
+                            "min" => Some(c1.min(c2)),
                             "pow" => Some(c1.pow(c2 as u32)),
                             _ => None
                         };
-                        if let Some(res) = res {
-                            return Term::Function(GlobalSymbol::from(res.to_string()), vec![]);
-                        }
                     }
                 }
             }
-            return Term::Function(f, ts);
+            if let Some(res) = res {
+                // return Term::Function(GlobalSymbol::from(res.to_string()), vec![]);
+                if res >= 0 {
+                    return Term::Function(GlobalSymbol::from("NUM".to_owned()+&res.to_string()), vec![]);
+                } else {
+                    return Term::Function(GlobalSymbol::from("NEGNUM".to_owned()+&(-res).to_string()), vec![]);
+                }
+            } else {
+                return Term::Function(f, ts);
+            }
         }
     }
+}
+
+fn constant_fold_set(s: Vec<(Term,Term)>) -> Vec<(Term,Term)> {
+    s.into_iter()
+        .map(|(l, r)| 
+            (constant_fold(l, true), constant_fold(r, true))
+        )
+        .filter(|(l, r)| l != r)
+        .collect()
 }
 
 
@@ -908,10 +954,11 @@ fn main() {
 
     // constant fold everything, just to be sure
     // TODO: only constant fold newly constructed terms
-    kbe.R.staged = kbe.R.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
-    kbe.E.staged = kbe.E.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
-    kbe.R.current = kbe.R.current.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
-    kbe.E.current = kbe.E.current.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+    kbe.R.staged = constant_fold_set(kbe.R.staged);
+    kbe.E.staged = constant_fold_set(kbe.E.staged);
+    kbe.R.current = constant_fold_set(kbe.R.current);
+    kbe.E.current = constant_fold_set(kbe.E.current);
+
 
 
     // kbe.R.commit();
@@ -976,7 +1023,9 @@ fn main() {
         #[cfg(debug_assertions)]
         for rule in kbe.R.iter_all() {
             let (l, r) = rule;
-            if !lpo(l, r) {
+            // if !lpo(l, r) {
+            if !lpo(l, r) && is_constant_term(l).is_none() {
+                // TODO: does not hold for constant folding
                 panic!("Rule not oriented: {:?} > {:?}", strterm(l), strterm(r));
             }
         }
@@ -1371,10 +1420,10 @@ fn main() {
 
         // constant fold everything, just to be sure
         // TODO: only constant fold newly constructed terms
-        kbe.R.staged = kbe.R.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
-        kbe.E.staged = kbe.E.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
-        kbe.R.current = kbe.R.current.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
-        kbe.E.current = kbe.E.current.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+        kbe.R.staged = constant_fold_set(kbe.R.staged);
+        kbe.E.staged = constant_fold_set(kbe.E.staged);
+        kbe.R.current = constant_fold_set(kbe.R.current);
+        kbe.E.current = constant_fold_set(kbe.E.current);
 
         // debug_assert!(kbe.R.staged.is_empty());
         // debug_assert!(kbe.E.staged.is_empty());
