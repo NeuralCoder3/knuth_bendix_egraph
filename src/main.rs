@@ -924,6 +924,10 @@ fn main() {
     // variable weight
     w.push(("?".into(), 0));
     for (symbol, _) in pre.iter() {
+        if !symbol.to_string().to_lowercase().starts_with("num") {
+            // handle as special case in weight
+            continue;
+        }
         w.push((symbol.clone(), 1));
     }
     // for (symbol, count) in pre.iter() {
