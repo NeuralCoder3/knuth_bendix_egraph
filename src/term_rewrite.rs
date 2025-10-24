@@ -640,7 +640,7 @@ pub fn parseargs(exp: &str) -> Vec<Term> {
         match first {
             ' ' => parseargs(&s[first.len_utf8()..]),
             '(' => {
-                println!("parseargs: {}", s);
+                // println!("parseargs: {}", s);
                 let args_strs = parseargexps(s);
                 args_strs.into_iter().map(|s| parseterm(&s)).collect()
             }

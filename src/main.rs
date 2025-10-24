@@ -254,6 +254,17 @@ fn subst_node(kbe: &KBEDAG, ss: &Vec<(VarSym, Id)>, t: &Term) -> Term {
     }
 }
 
+fn replace_dag_entry(kbe: &mut KBEDAG, id:Id, new_term: &Term) {
+    let r_id = insert_term(new_term, kbe);
+    kbe.C.remove_by_left(&id);
+    debug_assert!(
+        !kbe.S.contains_key(&id),
+        "Node with id {} already replaced",
+        id
+    );
+    kbe.S.insert(id, r_id);
+}
+
 fn apply_rules_var<F>(
     lpo: &F,
     kbe: &mut KBEDAG,
@@ -354,6 +365,7 @@ where
                 .then_with(|| fingerprint(r1).cmp(&fingerprint(r2)))
         });
         for (id, l,r) in rewrites {
+        // while let Some((id, l,r)) = rewrites.pop() {
             #[cfg(debug_assertions)]
             println!(
                 "DBG: Replace node {} with new term {} (previously {})",
@@ -375,14 +387,16 @@ where
             // TODO: r_id might already exist => do not first create but only construct term
             // TODO: is this term already constant folded?
             let r = constant_fold(r, true);
-            let r_id = insert_term(&r, kbe);
-            kbe.C.remove_by_left(&id);
-            debug_assert!(
-                !kbe.S.contains_key(&id),
-                "Node with id {} already replaced",
-                id
-            );
-            kbe.S.insert(id, r_id);
+            replace_dag_entry(kbe, id, &r);
+            // let r = constant_fold(r, true);
+            // let r_id = insert_term(&r, kbe);
+            // kbe.C.remove_by_left(&id);
+            // debug_assert!(
+            //     !kbe.S.contains_key(&id),
+            //     "Node with id {} already replaced",
+            //     id
+            // );
+            // kbe.S.insert(id, r_id);
             already_replaced.insert(id);
             applied.push((l, r));
         }
@@ -414,7 +428,8 @@ where
         //     .iter()
         //     .map(|(l, r)| (l.clone(), r.clone()))
         //     .collect::<Vec<_>>(),
-        false,
+        // false,
+        true, // For constant folding, the left hand side can become smaller
     );
     // #[cfg(debug_assertions)]
     // println!("Apply R-rules inverse");
@@ -446,6 +461,7 @@ where
     ));
 
     // recanonicalize the dag
+    constant_fold_dag(&mut kbe.dag);
     canonicalize_dag(&mut kbe.dag);
 
 
@@ -467,6 +483,25 @@ fn resolve_id(kbe: &KBEDAG, id: Id) -> Id {
         id = *real_id;
     }
     id
+}
+
+fn constant_fold_dag(kbe: &mut KBEDAG) {
+    let ids = kbe.C.left_values().cloned().collect::<Vec<_>>();
+    let mut already_folded = HashSet::default();
+    for id in ids {
+        if already_folded.contains(&id) {
+            continue;
+        }
+        already_folded.insert(id);
+        // TODO: do not go into subterm, just children should be enough
+        let term = extract_term(kbe, id);
+        let cloned_term = term.clone();
+        let cterm = constant_fold(term, true);
+        if cterm == cloned_term {
+            continue;
+        }
+        replace_dag_entry(kbe, id, &cterm);
+    }
 }
 
 fn canonicalize_dag(kbe: &mut KBEDAG) {
@@ -929,8 +964,8 @@ fn main() {
     // for (symbol, count) in pre.iter() {
     //     weight.push((symbol.clone(), (1+count) as usize));
     // }
-    // let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &w, t, t_prime);
-    let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
+    let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &w, t, t_prime);
+    // let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
 
     #[cfg(debug_assertions)]
     {
@@ -1331,9 +1366,9 @@ fn main() {
         let comparison_key = |((l,r), (count, rule_count, size, age)): ((&Term, &Term), (i32, i32, usize, usize))| {
             // (-count, size, -rule_count)
             // (-count, -rule_count, size)
-            (size, -count, -rule_count, age)
             // (size, age, -count, -rule_count)
-            // (-count, size, -rule_count)
+            // (size, -count, -rule_count, age)
+            (-count, size + age, -rule_count)
         };
 
         #[cfg(debug_assertions)]
@@ -1360,7 +1395,8 @@ fn main() {
             // big count good, small size good, big rule count good
             // small key means good
             let key = comparison_key(((&l,&r),(count,rule_count,size,age)));
-            critical_pair_queue.push((l, r), Reverse(key));
+            let data = (count,rule_count,size,age);
+            critical_pair_queue.push(((l, r),data), Reverse(key));
         }
 
         // counted_cps.sort_by(|((l1, r1), (c1, rc1, s1)), ((l2, r2), (c2, rc2, s2))| {
@@ -1375,8 +1411,8 @@ fn main() {
         // let critical_pair_count = 50;
         // let critical_pair_count = critical_pair_queue.len()/4;
         let mut top_cps = vec![];
-        while let Some(((l,r), _priority)) = critical_pair_queue.pop() {
-            top_cps.push((l,r));
+        while let Some(((rule,data), _priority)) = critical_pair_queue.pop() {
+            top_cps.push((rule,data));
             if top_cps.len() >= critical_pair_count {
                 break;
             }
@@ -1393,8 +1429,8 @@ fn main() {
         // #[cfg(debug_assertions)]
         println!("Top {} critical pairs:", critical_pair_count);
         // #[cfg(debug_assertions)]
-        for (l, r) in top_cps.iter() {
-            println!("  {} = {}", strterm(l), strterm(r));
+        for ((l,r), (count,rule_count,size,age)) in top_cps.iter() {
+            println!("  {} = {} (dag={}, rule={}, size={}, age={})", strterm(l), strterm(r), count, rule_count, size, age);
         }
 
         // to use the equations applied on the dag
@@ -1405,7 +1441,7 @@ fn main() {
 
         kbe.E.commit();
         kbe.R.commit();
-        kbe.E.staged.extend(top_cps.into_iter().map(|(l, r)| (l.clone(), r.clone())));
+        kbe.E.staged.extend(top_cps.into_iter().map(|((l, r),_)| (l.clone(), r.clone())));
         step32_total += step32_start.elapsed();
 
         // #[cfg(debug_assertions)]
