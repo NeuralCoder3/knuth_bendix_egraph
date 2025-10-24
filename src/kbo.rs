@@ -215,10 +215,9 @@ pub fn critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec<(Te
 fn symbol_greater(pre: &Precedence, x: &FunSym, y: &FunSym) -> bool {
     let i = pre.iter().find(|(sym, _)| sym == x).map(|(_, p)| *p);
     let j = pre.iter().find(|(sym, _)| sym == y).map(|(_, p)| *p);
-    match (i, j) {
-        (Some(i), Some(j)) => i > j,
-        _ => false,
-    }
+    let i_pos = i.unwrap_or(0);
+    let j_pos = j.unwrap_or(0);
+    i_pos > j_pos
 }
 
 /// Returns `true` if `x` and `y` are the same symbol or have equal precedence.
@@ -420,7 +419,10 @@ pub fn kbo_gt(pre: &Precedence, w: &Weight, t: &Term, t_prime: &Term) -> bool {
                     // t = f(...), t' = g(...), f > g
                     let pt = pre.iter().find(|(sym, _)| sym == f).map(|(_, p)| *p);
                     let pt_prime = pre.iter().find(|(sym, _)| sym == g).map(|(_, p)| *p);
-                    pt.is_some() && pt_prime.is_some() && pt > pt_prime
+                    // num lands in the or case
+                    let pt_pos = pt.unwrap_or(0);
+                    let pt_prime_pos = pt_prime.unwrap_or(0);
+                    pt_pos > pt_prime_pos
                     // TODO: need to check t > all elements of list
                 }
             },
@@ -735,7 +737,8 @@ pub fn term_size(pre: &Precedence, t: &Term) -> usize
     match t {
         Term::Variable(_) => 1,
         Term::Function(f, ts) => 
-            pre.iter().find(|(f_prime, _)| f_prime == f).unwrap().1 as usize + ts.iter().map(|t| term_size(pre, t)).sum::<usize>()
+            pre.iter().find(|(f_prime, _)| f_prime == f).map(|(_, p)| *p).unwrap_or(0) as usize + 
+            ts.iter().map(|t| term_size(pre, t)).sum::<usize>()
     }
 }
 

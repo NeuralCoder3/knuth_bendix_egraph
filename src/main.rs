@@ -693,7 +693,7 @@ fn is_constant(s: &FunSym) -> Option<i32> {
     let s = s.strip_prefix('\'').unwrap_or(&s).strip_suffix('\'').unwrap_or(&s);
 
     // strip if start with NUM, replace NEGNUM with -
-    let s = s.replace("negnum", "-").replace("num", "");
+    let s = s.replace("numneg", "-").replace("negnum", "-").replace("num", "");
 
 
     // try parse as integer
@@ -938,6 +938,9 @@ fn main() {
     //     "Div",
     // ].into_iter().map(|s| (s.to_string(), 0)).collect::<Vec<_>>();
 
+    // remove all symbols that start with "num"
+    sorted_symbols = sorted_symbols.into_iter().filter(|(symbol, _)| !symbol.to_string().to_lowercase().starts_with("num")).collect();
+
     // create precedence from sorted symbols
     let mut pre: Precedence = vec![];
     for (i, (symbol, _)) in sorted_symbols.iter().enumerate() {
@@ -959,10 +962,6 @@ fn main() {
     // variable weight
     w.push(("?".into(), 0));
     for (symbol, _) in pre.iter() {
-        if !symbol.to_string().to_lowercase().starts_with("num") {
-            // handle as special case in weight
-            continue;
-        }
         w.push((symbol.clone(), 1));
     }
     // for (symbol, count) in pre.iter() {
