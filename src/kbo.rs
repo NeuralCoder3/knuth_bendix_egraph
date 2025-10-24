@@ -310,10 +310,14 @@ fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: boo
             count.insert(v.clone(), count.get(&v).map(|c| *c).unwrap_or(0) + if increment { 1 } else { -1 });
             w.iter().find(|(sym, _)| sym == &"?".into()).map(|(_, w)| *w).unwrap_or(0)},
         Term::Function(f, ts) => 
-            w.iter()
-                .find(|(sym, _)| sym == f)
-                .map(|(_, w)| *w).unwrap_or(0) + 
-            ts.iter().map(|t| weight(w, t, count, increment)).sum::<usize>(),
+            if f.to_string().to_lowercase().starts_with("num") {
+                1
+            } else {
+                w.iter()
+                    .find(|(sym, _)| sym == f)
+                    .map(|(_, w)| *w).unwrap_or(2) + 
+                ts.iter().map(|t| weight(w, t, count, increment)).sum::<usize>()
+            }
     }
 }
 
@@ -326,10 +330,14 @@ pub fn term_weight(w: &Weight, t: &Term) -> usize {
             // 0
         },
         Term::Function(f, ts) => 
-            w.iter()
-                .find(|(sym, _)| sym == f)
-                .map(|(_, w)| *w).unwrap_or(0) + 
-            ts.iter().map(|t| term_weight(w, t)).sum::<usize>(),
+            if f.to_string().to_lowercase().starts_with("num") {
+                1
+            } else {
+                w.iter()
+                    .find(|(sym, _)| sym == f)
+                    .map(|(_, w)| *w).unwrap_or(2) + 
+                ts.iter().map(|t| term_weight(w, t)).sum::<usize>()
+            }
     }
 }
 
