@@ -17,6 +17,7 @@ use std::io::Write;
 use std::time::Duration;
 use std::time::Instant;
 use symbol_table::GlobalSymbol;
+use result::prelude::*;
 
 use crate::kbo::*;
 use crate::term_rewrite::*;
@@ -800,6 +801,9 @@ fn constant_fold_set(s: Vec<(Term,Term)>) -> Vec<(Term,Term)> {
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50,99]))]
 fn main() {
     let start_time = std::time::Instant::now();
+    // if env variable TIMEOUT is set, parse it as seconds
+    let timeout = std::env::var("TIMEOUT").map(|v| v.parse::<u64>());
+    let timeout = timeout.ok().and_then(Result::ok);
     let args = Args::parse();
 
     let mut kbe = KBEGraph {
@@ -1509,6 +1513,13 @@ fn main() {
         );
         if let Some(achieved_time) = achieved_time {
             println!("Achieved after: {:.2?} (iteration {})", achieved_time, achieved_iteration.unwrap());
+        }
+
+        if let Some(timeout) = timeout {
+            if start_time.elapsed() > Duration::from_secs(timeout) {
+                println!("Timeout set at {:.2?} seconds, took {:.2?} seconds", timeout, start_time.elapsed());
+                break;
+            }
         }
     }
 
