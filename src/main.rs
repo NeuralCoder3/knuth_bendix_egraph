@@ -17,11 +17,12 @@ use std::io::Write;
 use std::time::Duration;
 use std::time::Instant;
 use symbol_table::GlobalSymbol;
-use result::prelude::*;
 
 use crate::kbo::*;
 use crate::term_rewrite::*;
 use crate::types::*;
+use crate::util::is_constant;
+use crate::util::is_constant_term;
 
 
 #[cfg(not(feature = "hotpath"))]
@@ -676,51 +677,6 @@ struct Args {
     positional: Vec<String>,
 }
 
-fn is_constant(s: &FunSym) -> Option<i32> {
-    // words
-    // -?\d+
-    // '-?\d+' (with quotes)
-    // NUM\d+
-    // NEGNUM\d+
-    let s = s.as_str().to_lowercase();
-    let r = match s.as_str() {
-        "zero" => Some(0),
-        "one" => Some(1),
-        "two" => Some(2),
-        "minusone" => Some(-1),
-        _ => None,
-    };
-    if let Some(c) = r {
-        return Some(c)
-    } 
-
-    // strip ' around string
-    let s = s.strip_prefix('\'').unwrap_or(&s).strip_suffix('\'').unwrap_or(&s);
-
-    // strip if start with NUM, replace NEGNUM with -
-    let s = s.replace("numneg", "-").replace("negnum", "-").replace("num", "");
-
-
-    // try parse as integer
-    let c = s.to_string().parse::<i32>();
-    if c.is_ok() {
-        Some(c.unwrap())
-    } else {
-        None
-    }
-}
-
-fn is_constant_term(t: &Term) -> Option<i32> {
-    match t {
-        Term::Variable(_) => None,
-        Term::Function(f, ts) => 
-        if ts.len() == 0 {
-            is_constant(f)
-        } else {
-            None
-        }
-    }
-}
 
 fn constant_fold(t: Term, recursive: bool) -> Term {
     match t {

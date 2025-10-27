@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::thread::panicking;
 use either::Either;
 use once_cell::sync::Lazy;
 // use std::cell::RefCell;
@@ -11,10 +12,10 @@ use once_cell::sync::Lazy;
 
 use term_rewrite::uniquevar;
 
-use crate::is_constant;
 use crate::term_rewrite;
 use crate::term_rewrite::*;
 use crate::types::*;
+use crate::util::is_constant;
 
 /// Simple memoization cache for LPO computations
 static LPO_CACHE: Lazy<Mutex<HashMap<(Term, Term), bool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
@@ -310,6 +311,14 @@ fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: boo
             count.insert(v.clone(), count.get(&v).map(|c| *c).unwrap_or(0) + if increment { 1 } else { -1 });
             w.iter().find(|(sym, _)| sym == &"?".into()).map(|(_, w)| *w).unwrap_or(0)},
         Term::Function(f, ts) => 
+            // if f.to_string().to_lowercase() == "if" {
+            //     // if(cond, simplified, originalterm) => just take weight of simplified
+            //     println!("If: {}", strterm(t));
+            //     println!("If: {:?}", ts);
+            //     println!("If then: {}", strterm(&ts[1]));
+            //     println!();
+            //     weight(w, &ts[1], count, increment)
+            // } else 
             if is_constant(f).is_some() {
                 1
             } else {
@@ -322,7 +331,7 @@ fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: boo
     }
 }
 
-// for cp weight
+// for cp weight (not used in kbo itself -- see weight function)
 // variable 0, function symbols 1
 pub fn term_weight(w: &Weight, t: &Term) -> usize {
     match t {
@@ -331,6 +340,10 @@ pub fn term_weight(w: &Weight, t: &Term) -> usize {
             // 0
         },
         Term::Function(f, ts) => 
+            // if f.to_string().to_lowercase() == "if" {
+            //     // if(cond, simplified, originalterm) => just take weight of simplified
+            //     term_weight(w, &ts[1])
+            // } else 
             if is_constant(f).is_some() {
                 1
             } else {
