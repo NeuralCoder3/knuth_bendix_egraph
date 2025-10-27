@@ -386,6 +386,7 @@ where
             }
             // TODO: r_id might already exist => do not first create but only construct term
             // TODO: is this term already constant folded?
+            #[cfg(not(feature = "skip-constant-folding"))]
             let r = constant_fold(r, true);
             replace_dag_entry(kbe, id, &r);
             // let r = constant_fold(r, true);
@@ -428,7 +429,9 @@ where
         //     .iter()
         //     .map(|(l, r)| (l.clone(), r.clone()))
         //     .collect::<Vec<_>>(),
-        // false,
+        #[cfg(feature = "skip-constant-folding")]
+        false,
+        #[cfg(not(feature = "skip-constant-folding"))]
         true, // For constant folding, the left hand side can become smaller
     );
     // #[cfg(debug_assertions)]
@@ -461,6 +464,7 @@ where
     ));
 
     // recanonicalize the dag
+    #[cfg(not(feature = "skip-constant-folding"))]
     constant_fold_dag(&mut kbe.dag);
     canonicalize_dag(&mut kbe.dag);
 
@@ -878,7 +882,9 @@ fn main() {
     };
 
     // initial constant folding
-    kbe.E.staged = kbe.E.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect();
+    #[cfg(not(feature = "skip-constant-folding"))]
+    { kbe.E.staged = kbe.E.staged.into_iter().map(|(l, r)| (constant_fold(l, true), constant_fold(r, true))).collect(); }
+    #[cfg(not(feature = "skip-constant-folding"))]
     let t = constant_fold(t, true);
 
     let t_id = insert_term(&t, &mut kbe.dag);
@@ -992,10 +998,13 @@ fn main() {
 
     // constant fold everything, just to be sure
     // TODO: only constant fold newly constructed terms
+    #[cfg(not(feature = "skip-constant-folding"))]
+    {
     kbe.R.staged = constant_fold_set(kbe.R.staged);
     kbe.E.staged = constant_fold_set(kbe.E.staged);
     kbe.R.current = constant_fold_set(kbe.R.current);
     kbe.E.current = constant_fold_set(kbe.E.current);
+    }
 
 
 
@@ -1459,10 +1468,13 @@ fn main() {
 
         // constant fold everything, just to be sure
         // TODO: only constant fold newly constructed terms
+        #[cfg(not(feature = "skip-constant-folding"))]
+        {
         kbe.R.staged = constant_fold_set(kbe.R.staged);
         kbe.E.staged = constant_fold_set(kbe.E.staged);
         kbe.R.current = constant_fold_set(kbe.R.current);
         kbe.E.current = constant_fold_set(kbe.E.current);
+        }
 
         // debug_assert!(kbe.R.staged.is_empty());
         // debug_assert!(kbe.E.staged.is_empty());
