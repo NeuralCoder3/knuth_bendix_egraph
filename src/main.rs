@@ -948,13 +948,14 @@ fn main() {
     //     "Div",
     // ].into_iter().map(|s| (s.to_string(), 0)).collect::<Vec<_>>();
 
-    // remove all symbols that start with "num"
-    sorted_symbols = sorted_symbols.into_iter().filter(|(symbol, _)| !symbol.to_string().to_lowercase().starts_with("num")).collect();
+    // remove all symbols that are constants
+    sorted_symbols = sorted_symbols.into_iter().filter(|(symbol, _)| is_constant(symbol).is_none()).collect();
 
     // create precedence from sorted symbols
     let mut pre: Precedence = vec![];
     for (i, (symbol, _)) in sorted_symbols.iter().enumerate() {
-        pre.push((symbol.clone(), i as i32));
+        // 0 is constants
+        pre.push((symbol.clone(), (i+1) as i32));
     }
 
     // pre.sort_by_key(|(_, count)| *count as i64);
@@ -972,13 +973,24 @@ fn main() {
     // variable weight
     w.push(("?".into(), 0));
     for (symbol, _) in pre.iter() {
-        w.push((symbol.clone(), 1));
+        // w.push((symbol.clone(), 1));
+        w.push((symbol.clone(), 2));
     }
     // for (symbol, count) in pre.iter() {
     //     weight.push((symbol.clone(), (1+count) as usize));
     // }
     let lpo = |t: &Term, t_prime: &Term| kbo_gt(&pre, &w, t, t_prime);
     // let lpo = |t: &Term, t_prime: &Term| lpo_gt(&pre, t, t_prime);
+
+    // let tt1 = parseterm("MUL(NUMNEG12,V0)");
+    // let tt2 = parseterm("MUL(V0,NUMNEG12)");
+    // println!("tt1: {}", strterm(&tt1));
+    // println!("tt1: {:?}", tt1);
+    // println!("tt2: {}", strterm(&tt2));
+    // println!("tt2: {:?}", tt2);
+    // println!("LPO {} vs {}: {}", strterm(&tt1), strterm(&tt2), lpo(&tt1, &tt2));
+    // println!("LPO {} vs {}: {}", strterm(&tt2), strterm(&tt1), lpo(&tt2, &tt1));
+    // panic!();
 
     #[cfg(debug_assertions)]
     {
@@ -1088,7 +1100,17 @@ fn main() {
         #[cfg(debug_assertions)]
         println!("Simplify DAG.");
         let step31_start = std::time::Instant::now();
-        let new_rules = simplify_dag_var(&lpo, &mut kbe); 
+        let new_rules = simplify_dag_var(&lpo, &mut kbe)
+            .into_iter()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+            // .into_iter()
+            // .filter(|(l1, r1)| {
+            //     !kbe.E.iter_all().any(|(l, r)| sameeq_ref((l, r), (l1, r1)))
+            //     && !kbe.R.iter_all().any(|(l, r)| sameeq_ref((l, r), (l1, r1)))
+            // })
+            // .collect::<Vec<_>>();
         #[cfg(debug_assertions)]
         println!("New rules:");
         #[cfg(debug_assertions)]
@@ -1450,9 +1472,13 @@ fn main() {
         }
 
         // to use the equations applied on the dag
+        println!("Current Staged Equations:");
+        printeqs(&kbe.E.staged);
         let state = knuth_loop_staged(true, &lpo, (kbe.R, kbe.E));
         kbe.R = state.0;
         kbe.E = state.1;
+        println!("New Current Staged Equations:");
+        printeqs(&kbe.E.staged);
 
 
         kbe.E.commit();

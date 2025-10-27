@@ -11,6 +11,7 @@ use once_cell::sync::Lazy;
 
 use term_rewrite::uniquevar;
 
+use crate::is_constant;
 use crate::term_rewrite;
 use crate::term_rewrite::*;
 use crate::types::*;
@@ -309,12 +310,13 @@ fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: boo
             count.insert(v.clone(), count.get(&v).map(|c| *c).unwrap_or(0) + if increment { 1 } else { -1 });
             w.iter().find(|(sym, _)| sym == &"?".into()).map(|(_, w)| *w).unwrap_or(0)},
         Term::Function(f, ts) => 
-            if f.to_string().to_lowercase().starts_with("num") {
+            if is_constant(f).is_some() {
                 1
             } else {
                 w.iter()
                     .find(|(sym, _)| sym == f)
                     .map(|(_, w)| *w).unwrap_or(2) + 
+                // 2 +
                 ts.iter().map(|t| weight(w, t, count, increment)).sum::<usize>()
             }
     }
@@ -329,7 +331,7 @@ pub fn term_weight(w: &Weight, t: &Term) -> usize {
             // 0
         },
         Term::Function(f, ts) => 
-            if f.to_string().to_lowercase().starts_with("num") {
+            if is_constant(f).is_some() {
                 1
             } else {
                 w.iter()
@@ -498,10 +500,19 @@ where
     let (rules, eqs) = state;
     let orientable: Vec<Equation> = eqs.staged
         .iter()
-        .cloned()
         .filter(|(l, r)| lpo(l, r) || lpo(r, l))
+        .cloned()
         .collect();
     if orientable.is_empty() {
+        // println!("No orientable equations in state");
+        // printeqs(&eqs.staged);
+        // for (l, r) in eqs.staged.iter() {
+        //     println!("Equation: {:?} = {:?}", l, r);
+        //     println!("LPO {} vs {}: {}", strterm(l), strterm(r), lpo(l, r));
+        //     println!("LPO {} vs {}: {}", strterm(r), strterm(l), lpo(r, l));
+        //     println!();
+        // }
+        // panic!();
         // return Err(CompletionFailed);
         return Either::Right((rules, eqs));
     }
