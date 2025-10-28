@@ -1,3 +1,5 @@
+#![feature(explicit_tail_calls)]
+
 mod kbo;
 mod term_rewrite;
 mod types;
@@ -710,14 +712,14 @@ fn constant_fold(t: Term, recursive: bool) -> Term {
                             "-" | "sub" | "minus" => Some(c1-c2),
                             "+" | "add" | "plus" => Some(c1+c2),
                             "*" | "mul" | "multiply" => Some(c1*c2),
-                            "/" | "div" | "divide" => Some(c1/c2),
+                            "/" | "div" | "divide" => Some(if c2 != 0 { c1/c2 } else { 0 }),
                             "<" | "lt" | "less" => Some(if c1 < c2 { 1 } else { 0 }),
                             ">" | "gt" | "greater" => Some(if c1 > c2 { 1 } else { 0 }),
                             "=" | "eq" | "equal" => Some(if c1 == c2 { 1 } else { 0 }),
                             "!=" | "ne" | "neq" | "notequal" => Some(if c1 != c2 { 1 } else { 0 }),
                             "<=" | "le" | "leq" | "lessequal" => Some(if c1 <= c2 { 1 } else { 0 }),
                             ">=" | "ge" | "geq" | "greaterequal" => Some(if c1 >= c2 { 1 } else { 0 }),
-                            "%" | "mod" | "modulo" => Some(c1%c2),
+                            "%" | "mod" | "modulo" => Some(if c2 != 0 { c1%c2 } else { 0 }),
                             "&" | "and" | "land" => Some(if c1 != 0 && c2 != 0 { 1 } else { 0 }),
                             "or" | "lor" => Some(if c1 != 0 || c2 != 0 { 1 } else { 0 }),
                             "xor" | "lxor" => Some(if c1 != c2 { 1 } else { 0 }),
