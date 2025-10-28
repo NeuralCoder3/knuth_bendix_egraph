@@ -262,16 +262,15 @@ where
     } else if ys.is_empty() {
         true
     } else {
-        for (x, y) in xs.iter().zip(ys.iter()) {
-            if strictly_greater(greq, x, y) {
-                return true;
-            } else if equivalent_by_order(greq, x, y) {
-                continue;
-            } else {
-                return false;
-            }
+        let x = &xs[0];
+        let y = &ys[0];
+        if strictly_greater(greq, x, y) {
+            true
+        } else if equivalent_by_order(greq, x, y) {
+            lexicographic_greq(greq, &xs[1..], &ys[1..])
+        } else {
+            false
         }
-        return xs.len() <= ys.len();
     }
 }
 
@@ -284,21 +283,22 @@ where
     } else if ys.is_empty() {
         true
     } else {
-        for (x, y) in xs.iter().zip(ys.iter()) {
-            // If the current head elements are syntactically equal, skip them and
-            // continue with the remaining tails. This avoids re-invoking the
-            // comparator on identical subterms, which can create recursion cycles.
-            if x == y {
-                continue;
-            }
-            if kbo(x, y) {
-                return true;
-            }
-            if kbo(y, x) {
-                return false;
-            }
+        let x = &xs[0];
+        let y = &ys[0];
+        // If the current head elements are syntactically equal, skip them and
+        // continue with the remaining tails. This avoids re-invoking the
+        // comparator on identical subterms, which can create recursion cycles.
+        if x == y {
+            return lexicographic_kbo(kbo, &xs[1..], &ys[1..]);
         }
-        return xs.len() <= ys.len();
+        if kbo(x, y) { // x > y
+            true
+        } else if kbo(y, x) { // y > x
+            false
+        } else { // x not greater or smaller than y
+            lexicographic_kbo(kbo, &xs[1..], &ys[1..])
+            // false
+        }
     }
 }
 
@@ -306,27 +306,22 @@ where
 // restrictions: variable all same, smaller (or equal to all constants)
 // if one unary symbol has weight 0, it needs to be the largest symbol
 fn weight(w: &Weight, t: &Term, count: &mut HashMap<VarSym, i32>, increment: bool) -> usize {
-    // println!("Weight: {}", strterm(t));
     match t {
         Term::Variable(v) => {
             count.insert(v.clone(), count.get(&v).map(|c| *c).unwrap_or(0) + if increment { 1 } else { -1 });
             w.iter().find(|(sym, _)| sym == &"?".into()).map(|(_, w)| *w).unwrap_or(0)},
         Term::Function(f, ts) => 
-        // not possible here, else 
-        // a -> if(cond, b, a)
-        // and we would expand the a in the else again
             // if f.to_string().to_lowercase() == "if" {
             //     // if(cond, simplified, originalterm) => just take weight of simplified
-            //     // println!("If: {}", strterm(t));
-            //     // println!("If: {:?}", ts);
-            //     // println!("If then: {}", strterm(&ts[1]));
-            //     // println!();
+            //     println!("If: {}", strterm(t));
+            //     println!("If: {:?}", ts);
+            //     println!("If then: {}", strterm(&ts[1]));
+            //     println!();
             //     weight(w, &ts[1], count, increment)
             // } else 
             if is_constant(f).is_some() {
                 1
-            } else
-            {
+            } else {
                 w.iter()
                     .find(|(sym, _)| sym == f)
                     .map(|(_, w)| *w).unwrap_or(2) + 
@@ -345,10 +340,10 @@ pub fn term_weight(w: &Weight, t: &Term) -> usize {
             // 0
         },
         Term::Function(f, ts) => 
-            if f.to_string().to_lowercase() == "if" {
-                // if(cond, simplified, originalterm) => just take weight of simplified
-                term_weight(w, &ts[1])
-            } else 
+            // if f.to_string().to_lowercase() == "if" {
+            //     // if(cond, simplified, originalterm) => just take weight of simplified
+            //     term_weight(w, &ts[1])
+            // } else 
             if is_constant(f).is_some() {
                 1
             } else {

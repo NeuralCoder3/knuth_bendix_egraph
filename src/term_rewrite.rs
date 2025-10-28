@@ -111,12 +111,16 @@ pub fn containlist(l: &Term, ts: &[Term]) -> bool {
 /// [linormtop rs sub_rs t] normalizes [t] by scanning the rule list [sub_rs] (which is
 /// normally the entire rewrite set [rs]). If no rule applies, [t] is returned unchanged.
 pub fn linormtop(rs: &RuleSet, sub_rs: &[Rule], t: &Term) -> Term {
-    for (l, r) in sub_rs.iter() {
+    if sub_rs.is_empty() {
+        t.clone()
+    } else {
+        let (l, r) = &sub_rs[0];
         if let Some(s) = collate(l, t) {
-            return linormsubst(rs, &s, r);
+            linormsubst(rs, &s, r)
+        } else {
+            linormtop(rs, &sub_rs[1..], t)
         }
     }
-    t.clone()
 }
 
 /// [linormsubst rs s t] applies the substitution [s] to [t] and then normalizes.
@@ -142,12 +146,16 @@ pub fn linorm_ref(rs: &Vec<&Rule>, t: &Term) -> Term {
 }
 
 pub fn linormtop_ref(rs: &Vec<&Rule>, sub_rs: &[&Rule], t: &Term) -> Term {
-    for (l, r) in sub_rs.iter() {
+    if sub_rs.is_empty() {
+        t.clone()
+    } else {
+        let (l, r) = &sub_rs[0];
         if let Some(s) = collate(l, t) {
-            return linormsubst_ref(rs, &s, r);
+            linormsubst_ref(rs, &s, r)
+        } else {
+            linormtop_ref(rs, &sub_rs[1..], t)
         }
     }
-    t.clone()
 }
 
 pub fn linormsubst_ref(rs: &Vec<&Rule>, s: &SubstitutionSet, t: &Term) -> Term {
