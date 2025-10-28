@@ -262,15 +262,25 @@ where
     } else if ys.is_empty() {
         true
     } else {
-        let x = &xs[0];
-        let y = &ys[0];
-        if strictly_greater(greq, x, y) {
-            true
-        } else if equivalent_by_order(greq, x, y) {
-            lexicographic_greq(greq, &xs[1..], &ys[1..])
-        } else {
-            false
+        for (x, y) in xs.iter().zip(ys.iter()) {
+            if strictly_greater(greq, x, y) {
+                return true;
+            } else if equivalent_by_order(greq, x, y) {
+                continue;
+            } else {
+                return false;
+            }
         }
+        return xs.len() >= ys.len();
+        // let x = &xs[0];
+        // let y = &ys[0];
+        // if strictly_greater(greq, x, y) {
+        //     true
+        // } else if equivalent_by_order(greq, x, y) {
+        //     lexicographic_greq(greq, &xs[1..], &ys[1..])
+        // } else {
+        //     false
+        // }
     }
 }
 
@@ -283,22 +293,37 @@ where
     } else if ys.is_empty() {
         true
     } else {
-        let x = &xs[0];
-        let y = &ys[0];
-        // If the current head elements are syntactically equal, skip them and
-        // continue with the remaining tails. This avoids re-invoking the
-        // comparator on identical subterms, which can create recursion cycles.
-        if x == y {
-            return lexicographic_kbo(kbo, &xs[1..], &ys[1..]);
+        for (x, y) in xs.iter().zip(ys.iter()) {
+            // If the current head elements are syntactically equal, skip them and
+            // continue with the remaining tails. This avoids re-invoking the
+            // comparator on identical subterms, which can create recursion cycles.
+            if x == y {
+                continue;
+            }
+            if kbo(x, y) {
+                return true;
+            }
+            if kbo(y, x) {
+                return false;
+            }
         }
-        if kbo(x, y) { // x > y
-            true
-        } else if kbo(y, x) { // y > x
-            false
-        } else { // x not greater or smaller than y
-            lexicographic_kbo(kbo, &xs[1..], &ys[1..])
-            // false
-        }
+        return xs.len() > ys.len();
+
+        // let x = &xs[0];
+        // let y = &ys[0];
+        // // If the current head elements are syntactically equal, skip them and
+        // // continue with the remaining tails. This avoids re-invoking the
+        // // comparator on identical subterms, which can create recursion cycles.
+        // if x == y {
+        //     return lexicographic_kbo(kbo, &xs[1..], &ys[1..]);
+        // }
+        // if kbo(x, y) { // x > y
+        //     true
+        // } else if kbo(y, x) { // y > x
+        //     false
+        // } else { // x not greater or smaller than y
+        //     lexicographic_kbo(kbo, &xs[1..], &ys[1..])
+        // }
     }
 }
 
